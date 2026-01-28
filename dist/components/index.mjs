@@ -545,7 +545,10 @@ var AltTextGenerator = ({
     /* @__PURE__ */ jsxs3(
       Button3,
       {
-        onClick: () => setIsOpen(true),
+        onClick: async () => {
+          await fetchMissingAlt();
+          setIsOpen(true);
+        },
         buttonStyle: "secondary",
         disabled: missingCount === 0,
         children: [

@@ -573,7 +573,10 @@ var AltTextGenerator = ({
     /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)(
       import_ui3.Button,
       {
-        onClick: () => setIsOpen(true),
+        onClick: async () => {
+          await fetchMissingAlt();
+          setIsOpen(true);
+        },
         buttonStyle: "secondary",
         disabled: missingCount === 0,
         children: [

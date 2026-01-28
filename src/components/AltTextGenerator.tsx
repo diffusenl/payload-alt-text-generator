@@ -58,7 +58,10 @@ export const AltTextGenerator: React.FC<AltTextGeneratorProps> = ({
   return (
     <div style={{ marginBottom: '1rem' }}>
       <Button
-        onClick={() => setIsOpen(true)}
+        onClick={async () => {
+          await fetchMissingAlt()
+          setIsOpen(true)
+        }}
         buttonStyle="secondary"
         disabled={missingCount === 0}
       >

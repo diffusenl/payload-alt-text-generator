@@ -1,0 +1,72 @@
+{
+  "name": "@diffusenl/payload-alt-text-generator",
+  "version": "1.0.1",
+  "description": "AI-powered alt text generation for Payload CMS 3.x using Claude Vision API",
+  "main": "dist/index.js",
+  "module": "dist/index.mjs",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.js"
+    },
+    "./components": {
+      "types": "./dist/components/index.d.ts",
+      "import": "./dist/components/index.mjs",
+      "require": "./dist/components/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "lint": "eslint src/",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "payload",
+    "payloadcms",
+    "payload-plugin",
+    "plugin",
+    "alt-text",
+    "accessibility",
+    "a11y",
+    "ai",
+    "claude",
+    "anthropic",
+    "vision",
+    "image",
+    "seo",
+    "cms"
+  ],
+  "author": "Dirk-Jan Smit",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/colbe-com/payload-alt-text-generator.git"
+  },
+  "bugs": {
+    "url": "https://github.com/colbe-com/payload-alt-text-generator/issues"
+  },
+  "homepage": "https://github.com/colbe-com/payload-alt-text-generator#readme",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "peerDependencies": {
+    "payload": "^3.0.0",
+    "react": "^18.0.0 || ^19.0.0"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.30.0"
+  },
+  "devDependencies": {
+    "@payloadcms/ui": "^3.0.0",
+    "@types/react": "^18.0.0",
+    "payload": "^3.0.0",
+    "tsup": "^8.0.0",
+    "typescript": "^5.0.0"
+  }
+}

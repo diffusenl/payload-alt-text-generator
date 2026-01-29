@@ -1,3 +1,90 @@
+var __defProp = Object.defineProperty;
+var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
+var __getOwnPropNames = Object.getOwnPropertyNames;
+var __hasOwnProp = Object.prototype.hasOwnProperty;
+var __esm = (fn, res) => function __init() {
+  return fn && (res = (0, fn[__getOwnPropNames(fn)[0]])(fn = 0)), res;
+};
+var __export = (target, all) => {
+  for (var name in all)
+    __defProp(target, name, { get: all[name], enumerable: true });
+};
+var __copyProps = (to, from, except, desc) => {
+  if (from && typeof from === "object" || typeof from === "function") {
+    for (let key of __getOwnPropNames(from))
+      if (!__hasOwnProp.call(to, key) && key !== except)
+        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
+  }
+  return to;
+};
+var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
+
+// src/providers/google.ts
+var google_exports = {};
+__export(google_exports, {
+  GoogleProvider: () => GoogleProvider
+});
+import { generateText as generateText3 } from "ai";
+import { createGoogleGenerativeAI } from "@ai-sdk/google";
+var DEFAULT_MODEL3, GoogleProvider;
+var init_google = __esm({
+  "src/providers/google.ts"() {
+    "use strict";
+    DEFAULT_MODEL3 = "gemini-1.5-flash";
+    GoogleProvider = class {
+      constructor(options = {}) {
+        this.name = "google";
+        this.apiKey = options.apiKey;
+        this.model = options.model ?? DEFAULT_MODEL3;
+      }
+      async generateAltText(params) {
+        const { image, prompt, maxLength } = params;
+        const google = createGoogleGenerativeAI({
+          apiKey: this.apiKey ?? process.env.GOOGLE_GENERATIVE_AI_API_KEY
+        });
+        let result;
+        let retries = 0;
+        const maxRetries = 3;
+        while (retries <= maxRetries) {
+          try {
+            result = await generateText3({
+              model: google(this.model),
+              maxOutputTokens: 100,
+              messages: [
+                {
+                  role: "user",
+                  content: [
+                    {
+                      type: "image",
+                      image: `data:${image.mediaType};base64,${image.base64Data}`
+                    },
+                    {
+                      type: "text",
+                      text: prompt
+                    }
+                  ]
+                }
+              ]
+            });
+            break;
+          } catch (err) {
+            const isRateLimit = err instanceof Error && (err.message.includes("429") || err.message.includes("RESOURCE_EXHAUSTED") || err.message.includes("rate limit"));
+            if (isRateLimit && retries < maxRetries) {
+              const delay = Math.pow(2, retries) * 15e3;
+              await new Promise((resolve) => setTimeout(resolve, delay));
+              retries++;
+            } else {
+              throw err;
+            }
+          }
+        }
+        const altText = result.text.trim().slice(0, maxLength);
+        return { altText };
+      }
+    };
+  }
+});
+
 // src/endpoints/getMissingAlt.ts
 var IMAGE_EXTENSIONS = ["jpg", "jpeg", "png", "gif", "webp", "avif", "bmp", "tiff", "tif", "svg"];
 function isImageFile(filename) {
@@ -359,66 +446,10 @@ var OpenAIProvider = class {
   }
 };
 
-// src/providers/google.ts
-import { generateText as generateText3 } from "ai";
-import { createGoogleGenerativeAI } from "@ai-sdk/google";
-var DEFAULT_MODEL3 = "gemini-1.5-flash";
-var GoogleProvider = class {
-  constructor(options = {}) {
-    this.name = "google";
-    this.apiKey = options.apiKey;
-    this.model = options.model ?? DEFAULT_MODEL3;
-  }
-  async generateAltText(params) {
-    const { image, prompt, maxLength } = params;
-    const google = createGoogleGenerativeAI({
-      apiKey: this.apiKey ?? process.env.GOOGLE_GENERATIVE_AI_API_KEY
-    });
-    let result;
-    let retries = 0;
-    const maxRetries = 3;
-    while (retries <= maxRetries) {
-      try {
-        result = await generateText3({
-          model: google(this.model),
-          maxOutputTokens: 100,
-          messages: [
-            {
-              role: "user",
-              content: [
-                {
-                  type: "image",
-                  image: `data:${image.mediaType};base64,${image.base64Data}`
-                },
-                {
-                  type: "text",
-                  text: prompt
-                }
-              ]
-            }
-          ]
-        });
-        break;
-      } catch (err) {
-        const isRateLimit = err instanceof Error && (err.message.includes("429") || err.message.includes("RESOURCE_EXHAUSTED") || err.message.includes("rate limit"));
-        if (isRateLimit && retries < maxRetries) {
-          const delay = Math.pow(2, retries) * 15e3;
-          await new Promise((resolve) => setTimeout(resolve, delay));
-          retries++;
-        } else {
-          throw err;
-        }
-      }
-    }
-    const altText = result.text.trim().slice(0, maxLength);
-    return { altText };
-  }
-};
-
 // src/providers/index.ts
 function createProvider(config) {
   if (!config) {
-    return new AnthropicProvider();
+    return new OpenAIProvider();
   }
   switch (config.provider) {
     case "anthropic":
@@ -431,11 +462,13 @@ function createProvider(config) {
         apiKey: config.apiKey,
         model: config.model
       });
-    case "google":
-      return new GoogleProvider({
+    case "google": {
+      const { GoogleProvider: GoogleProvider2 } = (init_google(), __toCommonJS(google_exports));
+      return new GoogleProvider2({
         apiKey: config.apiKey,
         model: config.model
       });
+    }
     default: {
       const exhaustiveCheck = config;
       throw new Error(`Unknown provider: ${exhaustiveCheck.provider}`);

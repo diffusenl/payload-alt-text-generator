@@ -35,12 +35,11 @@ var google_exports = {};
 __export(google_exports, {
   GoogleProvider: () => GoogleProvider
 });
-var import_ai3, import_google, DEFAULT_MODEL3, GoogleProvider;
+var import_ai3, DEFAULT_MODEL3, GoogleProvider;
 var init_google = __esm({
   "src/providers/google.ts"() {
     "use strict";
     import_ai3 = require("ai");
-    import_google = require("@ai-sdk/google");
     DEFAULT_MODEL3 = "gemini-1.5-flash";
     GoogleProvider = class {
       constructor(options = {}) {
@@ -50,7 +49,8 @@ var init_google = __esm({
       }
       async generateAltText(params) {
         const { image, prompt, maxLength } = params;
-        const google = (0, import_google.createGoogleGenerativeAI)({
+        const { createGoogleGenerativeAI } = await import("@ai-sdk/google");
+        const google = createGoogleGenerativeAI({
           apiKey: this.apiKey ?? process.env.GOOGLE_GENERATIVE_AI_API_KEY
         });
         let result;

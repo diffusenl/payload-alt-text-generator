@@ -1,5 +1,4 @@
 import { generateText } from 'ai'
-import { createGoogleGenerativeAI } from '@ai-sdk/google'
 import type { AIVisionProvider, GenerateAltTextParams } from './types'
 
 export interface GoogleProviderOptions {
@@ -21,6 +20,9 @@ export class GoogleProvider implements AIVisionProvider {
 
   async generateAltText(params: GenerateAltTextParams): Promise<{ altText: string }> {
     const { image, prompt, maxLength } = params
+
+    // Dynamic import to avoid loading @ai-sdk/google when not used
+    const { createGoogleGenerativeAI } = await import('@ai-sdk/google')
 
     const google = createGoogleGenerativeAI({
       apiKey: this.apiKey ?? process.env.GOOGLE_GENERATIVE_AI_API_KEY,

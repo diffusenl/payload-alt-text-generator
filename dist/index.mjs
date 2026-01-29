@@ -25,7 +25,6 @@ __export(google_exports, {
   GoogleProvider: () => GoogleProvider
 });
 import { generateText as generateText3 } from "ai";
-import { createGoogleGenerativeAI } from "@ai-sdk/google";
 var DEFAULT_MODEL3, GoogleProvider;
 var init_google = __esm({
   "src/providers/google.ts"() {
@@ -39,6 +38,7 @@ var init_google = __esm({
       }
       async generateAltText(params) {
         const { image, prompt, maxLength } = params;
+        const { createGoogleGenerativeAI } = await import("@ai-sdk/google");
         const google = createGoogleGenerativeAI({
           apiKey: this.apiKey ?? process.env.GOOGLE_GENERATIVE_AI_API_KEY
         });

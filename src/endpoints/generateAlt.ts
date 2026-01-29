@@ -2,6 +2,8 @@ import type { PayloadHandler } from 'payload'
 import type { AltTextGeneratorPluginOptions } from '../types'
 import type { AIVisionProvider } from '../providers/types'
 import sharp from 'sharp'
+import path from 'path'
+import fs from 'fs/promises'
 
 /**
  * Derive alt text from filename for SVGs and other unsupported formats
@@ -36,6 +38,79 @@ function deriveAltFromFilename(filename: string): string {
   return cleaned
 }
 
+/**
+ * Get image buffer - tries direct file read first, falls back to HTTP fetch
+ */
+async function getImageBuffer(
+  imageUrl: string,
+  filename: string | undefined,
+  collectionSlug: string,
+  req: Parameters<PayloadHandler>[0]
+): Promise<{ buffer: Buffer; contentType: string }> {
+  const { payload } = req
+
+  // Check if this is a Payload file URL (relative path like /api/media/file/...)
+  const isPayloadFileUrl = imageUrl.startsWith(`/api/${collectionSlug}/file/`)
+
+  if (isPayloadFileUrl && filename) {
+    // Try to read file directly from storage
+    try {
+      // Get collection config to find staticDir
+      const collectionConfig = payload.collections[collectionSlug]?.config
+
+      if (collectionConfig && 'upload' in collectionConfig && collectionConfig.upload) {
+        const uploadConfig = typeof collectionConfig.upload === 'object' ? collectionConfig.upload : null
+        const staticDir = (uploadConfig as { staticDir?: string } | null)?.staticDir || collectionSlug
+
+        // Resolve the file path
+        const filePath = path.resolve(process.cwd(), staticDir, filename)
+
+        // Read file directly
+        const buffer = await fs.readFile(filePath)
+
+        // Determine content type from extension
+        const ext = filename.split('.').pop()?.toLowerCase() || ''
+        const contentTypes: Record<string, string> = {
+          jpg: 'image/jpeg',
+          jpeg: 'image/jpeg',
+          png: 'image/png',
+          gif: 'image/gif',
+          webp: 'image/webp',
+          avif: 'image/avif',
+          bmp: 'image/bmp',
+          tiff: 'image/tiff',
+          tif: 'image/tiff',
+        }
+        const contentType = contentTypes[ext] || 'image/jpeg'
+
+        return { buffer, contentType }
+      }
+    } catch (err) {
+      // File read failed, fall back to HTTP fetch
+      console.log('[alt-text-generator] Direct file read failed, trying HTTP fetch:', err instanceof Error ? err.message : err)
+    }
+  }
+
+  // Fall back to HTTP fetch (for external URLs or if direct read failed)
+  let fullImageUrl = imageUrl
+  if (imageUrl.startsWith('/')) {
+    const protocol = req.headers.get('x-forwarded-proto') || 'http'
+    const host = req.headers.get('host') || 'localhost:3000'
+    fullImageUrl = `${protocol}://${host}${imageUrl}`
+  }
+
+  const imageResponse = await fetch(fullImageUrl)
+
+  if (!imageResponse.ok) {
+    throw new Error(`Failed to fetch image: ${imageResponse.status}`)
+  }
+
+  const buffer = Buffer.from(await imageResponse.arrayBuffer())
+  const contentType = imageResponse.headers.get('content-type') || 'image/jpeg'
+
+  return { buffer, contentType }
+}
+
 export interface GenerateAltOptions extends Required<AltTextGeneratorPluginOptions> {
   aiProvider: AIVisionProvider
 }
@@ -52,12 +127,15 @@ export const generateAlt = (
       return Response.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const body = (await req.json()) as {
+    const body = (await req.json?.()) as {
       imageId?: string
       imageUrl?: string
       filename?: string
+      collectionSlug?: string
     }
     const { imageId, imageUrl, filename } = body
+    // Use the collection slug from the request URL
+    const collectionSlug = req.routeParams?.collection as string || options.collections[0]
 
     if (!imageUrl) {
       return Response.json({ error: 'Image URL is required' }, { status: 400 })
@@ -93,22 +171,15 @@ export const generateAlt = (
         })
       }
 
-      // Build full URL if relative
-      let fullImageUrl = imageUrl
-      if (imageUrl.startsWith('/')) {
-        const protocol = req.headers.get('x-forwarded-proto') || 'http'
-        const host = req.headers.get('host') || 'localhost:3000'
-        fullImageUrl = `${protocol}://${host}${imageUrl}`
-      }
+      // Get image buffer (tries direct file read first, then HTTP fetch)
+      const { buffer: imageBuffer, contentType } = await getImageBuffer(
+        imageUrl,
+        filename,
+        collectionSlug,
+        req
+      )
 
-      // Fetch and convert image to base64
-      const imageResponse = await fetch(fullImageUrl)
-
-      if (!imageResponse.ok) {
-        throw new Error(`Failed to fetch image: ${imageResponse.status}`)
-      }
-
-      let imageBuffer = Buffer.from(await imageResponse.arrayBuffer())
+      let finalBuffer = imageBuffer
       let wasResized = false
 
       // Check image dimensions and file size
@@ -122,17 +193,16 @@ export const generateAlt = (
         (metadata.height && metadata.height > MAX_DIMENSION)
 
       if (needsResize) {
-        imageBuffer = await sharp(imageBuffer)
+        finalBuffer = await sharp(imageBuffer)
           .resize(1600, 1600, { fit: 'inside', withoutEnlargement: true })
           .jpeg({ quality: 80 })
           .toBuffer()
         wasResized = true
       }
 
-      const base64Data = imageBuffer.toString('base64')
+      const base64Data = finalBuffer.toString('base64')
 
       // Determine media type (jpeg if we resized, otherwise from content-type)
-      const contentType = imageResponse.headers.get('content-type') || ''
       let mediaType: 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp' = 'image/jpeg'
 
       if (!wasResized) {

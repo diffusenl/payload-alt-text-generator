@@ -11,7 +11,7 @@ export const saveBulkAlt = (
       return Response.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const body = (await req.json()) as {
+    const body = (await req.json?.()) as {
       updates?: Array<{ id: string; alt: string }>
       collectionSlug?: string
     }

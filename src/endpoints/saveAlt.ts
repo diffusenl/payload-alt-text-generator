@@ -11,7 +11,7 @@ export const saveAlt = (
       return Response.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const body = (await req.json()) as {
+    const body = (await req.json?.()) as {
       imageId?: string
       altText?: string
       collectionSlug?: string

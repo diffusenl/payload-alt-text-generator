@@ -173,6 +173,8 @@ var getMissingAlt = (options) => {
 
 // src/endpoints/generateAlt.ts
 var import_sharp = __toESM(require("sharp"));
+var import_path = __toESM(require("path"));
+var import_promises = __toESM(require("fs/promises"));
 function deriveAltFromFilename(filename) {
   const basename = filename.split("/").pop() || filename;
   const nameWithoutExt = basename.replace(/\.[^.]+$/, "");
@@ -188,6 +190,50 @@ function deriveAltFromFilename(filename) {
   }
   return cleaned;
 }
+async function getImageBuffer(imageUrl, filename, collectionSlug, req) {
+  const { payload } = req;
+  const isPayloadFileUrl = imageUrl.startsWith(`/api/${collectionSlug}/file/`);
+  if (isPayloadFileUrl && filename) {
+    try {
+      const collectionConfig = payload.collections[collectionSlug]?.config;
+      if (collectionConfig && "upload" in collectionConfig && collectionConfig.upload) {
+        const uploadConfig = typeof collectionConfig.upload === "object" ? collectionConfig.upload : null;
+        const staticDir = uploadConfig?.staticDir || collectionSlug;
+        const filePath = import_path.default.resolve(process.cwd(), staticDir, filename);
+        const buffer2 = await import_promises.default.readFile(filePath);
+        const ext = filename.split(".").pop()?.toLowerCase() || "";
+        const contentTypes = {
+          jpg: "image/jpeg",
+          jpeg: "image/jpeg",
+          png: "image/png",
+          gif: "image/gif",
+          webp: "image/webp",
+          avif: "image/avif",
+          bmp: "image/bmp",
+          tiff: "image/tiff",
+          tif: "image/tiff"
+        };
+        const contentType2 = contentTypes[ext] || "image/jpeg";
+        return { buffer: buffer2, contentType: contentType2 };
+      }
+    } catch (err) {
+      console.log("[alt-text-generator] Direct file read failed, trying HTTP fetch:", err instanceof Error ? err.message : err);
+    }
+  }
+  let fullImageUrl = imageUrl;
+  if (imageUrl.startsWith("/")) {
+    const protocol = req.headers.get("x-forwarded-proto") || "http";
+    const host = req.headers.get("host") || "localhost:3000";
+    fullImageUrl = `${protocol}://${host}${imageUrl}`;
+  }
+  const imageResponse = await fetch(fullImageUrl);
+  if (!imageResponse.ok) {
+    throw new Error(`Failed to fetch image: ${imageResponse.status}`);
+  }
+  const buffer = Buffer.from(await imageResponse.arrayBuffer());
+  const contentType = imageResponse.headers.get("content-type") || "image/jpeg";
+  return { buffer, contentType };
+}
 var generateAlt = (options) => {
   const { aiProvider } = options;
   return async (req) => {
@@ -195,8 +241,9 @@ var generateAlt = (options) => {
     if (!user) {
       return Response.json({ error: "Unauthorized" }, { status: 401 });
     }
-    const body = await req.json();
+    const body = await req.json?.();
     const { imageId, imageUrl, filename } = body;
+    const collectionSlug = req.routeParams?.collection || options.collections[0];
     if (!imageUrl) {
       return Response.json({ error: "Image URL is required" }, { status: 400 });
     }
@@ -222,28 +269,23 @@ var generateAlt = (options) => {
           imageUrl
         });
       }
-      let fullImageUrl = imageUrl;
-      if (imageUrl.startsWith("/")) {
-        const protocol = req.headers.get("x-forwarded-proto") || "http";
-        const host = req.headers.get("host") || "localhost:3000";
-        fullImageUrl = `${protocol}://${host}${imageUrl}`;
-      }
-      const imageResponse = await fetch(fullImageUrl);
-      if (!imageResponse.ok) {
-        throw new Error(`Failed to fetch image: ${imageResponse.status}`);
-      }
-      let imageBuffer = Buffer.from(await imageResponse.arrayBuffer());
+      const { buffer: imageBuffer, contentType } = await getImageBuffer(
+        imageUrl,
+        filename,
+        collectionSlug,
+        req
+      );
+      let finalBuffer = imageBuffer;
       let wasResized = false;
       const metadata = await (0, import_sharp.default)(imageBuffer).metadata();
       const MAX_SIZE = 4 * 1024 * 1024;
       const MAX_DIMENSION = 7500;
       const needsResize = imageBuffer.byteLength > MAX_SIZE || metadata.width && metadata.width > MAX_DIMENSION || metadata.height && metadata.height > MAX_DIMENSION;
       if (needsResize) {
-        imageBuffer = await (0, import_sharp.default)(imageBuffer).resize(1600, 1600, { fit: "inside", withoutEnlargement: true }).jpeg({ quality: 80 }).toBuffer();
+        finalBuffer = await (0, import_sharp.default)(imageBuffer).resize(1600, 1600, { fit: "inside", withoutEnlargement: true }).jpeg({ quality: 80 }).toBuffer();
         wasResized = true;
       }
-      const base64Data = imageBuffer.toString("base64");
-      const contentType = imageResponse.headers.get("content-type") || "";
+      const base64Data = finalBuffer.toString("base64");
       let mediaType = "image/jpeg";
       if (!wasResized) {
         if (contentType.includes("png")) mediaType = "image/png";
@@ -286,7 +328,7 @@ var saveAlt = (options) => {
     if (!user) {
       return Response.json({ error: "Unauthorized" }, { status: 401 });
     }
-    const body = await req.json();
+    const body = await req.json?.();
     const { imageId, altText, collectionSlug } = body;
     if (!imageId || altText === void 0) {
       return Response.json(
@@ -318,7 +360,7 @@ var saveBulkAlt = (options) => {
     if (!user) {
       return Response.json({ error: "Unauthorized" }, { status: 401 });
     }
-    const body = await req.json();
+    const body = await req.json?.();
     const { updates, collectionSlug } = body;
     if (!updates || !Array.isArray(updates)) {
       return Response.json(

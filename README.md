@@ -129,6 +129,9 @@ altTextGeneratorPlugin({
 
   // Custom prompt (see below for details)
   prompt: '...',
+
+  // Extra context to append to the default prompt
+  extendPrompt: 'This is a healthcare website. Use formal tone.',
 })
 ```
 

@@ -250,7 +250,13 @@ var generateAlt = (options) => {
         else if (contentType.includes("webp")) mediaType = "image/webp";
         else if (contentType.includes("gif")) mediaType = "image/gif";
       }
-      const prompt = options.prompt.replace(/{filename}/g, filename || "unknown").replace(/{maxLength}/g, String(options.maxLength)).replace(/{language}/g, options.language);
+      let prompt = options.prompt.replace(/{filename}/g, filename || "unknown").replace(/{maxLength}/g, String(options.maxLength)).replace(/{language}/g, options.language);
+      if (options.extendPrompt) {
+        const extendedPart = options.extendPrompt.replace(/{filename}/g, filename || "unknown").replace(/{maxLength}/g, String(options.maxLength)).replace(/{language}/g, options.language);
+        prompt = `${prompt}
+
+${extendedPart}`;
+      }
       const result = await aiProvider.generateAltText({
         image: { base64Data, mediaType },
         prompt,
@@ -509,6 +515,7 @@ Rules:
 - The filename often contains the subject \u2014 use it as a strong hint
 
 Respond with ONLY the alt text, nothing else.`,
+  extendPrompt: "",
   maxLength: 80,
   batchSize: 5,
   model: "gpt-4o-mini",

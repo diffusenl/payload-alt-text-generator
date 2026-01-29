@@ -5,11 +5,11 @@ import { useState as useState3, useEffect as useEffect2, useCallback } from "rea
 import { Button as Button3 } from "@payloadcms/ui";
 
 // src/components/AltTextModal.tsx
-import { useState as useState2, useEffect, useRef as useRef2 } from "react";
+import { useState as useState2, useEffect, useRef } from "react";
 import { Button as Button2 } from "@payloadcms/ui";
 
 // src/components/ImageRow.tsx
-import { useState, useRef } from "react";
+import { useState } from "react";
 import { Button } from "@payloadcms/ui";
 import { jsx, jsxs } from "react/jsx-runtime";
 var ImageRow = ({
@@ -21,7 +21,12 @@ var ImageRow = ({
 }) => {
   const status = suggestion?.status || "pending";
   const [isSaving, setIsSaving] = useState(false);
-  const originalValueRef = useRef(suggestion?.suggestedAlt || "");
+  const handleSave = async () => {
+    if (!suggestion?.suggestedAlt) return;
+    setIsSaving(true);
+    await onSave(suggestion.suggestedAlt);
+    setIsSaving(false);
+  };
   const statusColors = {
     pending: "var(--theme-elevation-400)",
     generating: "var(--theme-warning-500)",
@@ -137,18 +142,6 @@ var ImageRow = ({
               onChange: (e) => {
                 onUpdate(e.target.value);
               },
-              onFocus: () => {
-                originalValueRef.current = suggestion.suggestedAlt;
-              },
-              onBlur: async (e) => {
-                const newValue = e.target.value;
-                if (newValue !== originalValueRef.current) {
-                  setIsSaving(true);
-                  await onSave(newValue);
-                  setIsSaving(false);
-                  originalValueRef.current = newValue;
-                }
-              },
               disabled: isSaving,
               placeholder: "Alt text...",
               "aria-label": `Alt text for ${image.filename}`,
@@ -186,6 +179,16 @@ var ImageRow = ({
           status === "pending" && /* @__PURE__ */ jsx(Button, { onClick: onGenerate, buttonStyle: "secondary", size: "small", children: "Generate" }),
           status === "generating" && /* @__PURE__ */ jsx("span", { style: { fontSize: "0.75rem", color: "var(--theme-warning-500)" }, children: "Loading..." }),
           status === "error" && /* @__PURE__ */ jsx(Button, { onClick: onGenerate, buttonStyle: "secondary", size: "small", children: "Retry" }),
+          status === "ready" && /* @__PURE__ */ jsx(
+            Button,
+            {
+              onClick: handleSave,
+              buttonStyle: "secondary",
+              size: "small",
+              disabled: isSaving,
+              children: isSaving ? "Saving..." : "Save"
+            }
+          ),
           status === "saved" && /* @__PURE__ */ jsx(
             "span",
             {
@@ -227,8 +230,9 @@ var AltTextModal = ({
     /* @__PURE__ */ new Map()
   );
   const [isGenerating, setIsGenerating] = useState2(false);
+  const [isCancelling, setIsCancelling] = useState2(false);
   const [progress, setProgress] = useState2({ current: 0, total: 0 });
-  const cancelRef = useRef2(false);
+  const cancelRef = useRef(false);
   useEffect(() => {
     const handleEscape = (e) => {
       if (e.key === "Escape") onClose();
@@ -333,15 +337,9 @@ var AltTextModal = ({
     } catch {
     }
   };
-  const generateAndSave = async (image) => {
-    const result = await generateAltText(image);
-    if (result.status === "ready" && result.suggestedAlt) {
-      await saveBatch([result]);
-    }
-    return result;
-  };
   const handleGenerateAll = async () => {
     cancelRef.current = false;
+    setIsCancelling(false);
     setIsGenerating(true);
     setProgress({ current: 0, total: safeImages.length });
     for (let i = 0; i < safeImages.length; i += batchSize) {
@@ -349,16 +347,25 @@ var AltTextModal = ({
         break;
       }
       const batch = safeImages.slice(i, i + batchSize);
-      await Promise.all(batch.map(generateAndSave));
+      await Promise.all(batch.map(generateAltText));
       setProgress((prev) => ({
         ...prev,
         current: Math.min(i + batchSize, safeImages.length)
       }));
     }
     setIsGenerating(false);
+    setIsCancelling(false);
+  };
+  const handleSaveAll = async () => {
+    const readySuggestions = Array.from(suggestions.values()).filter(
+      (s) => s.status === "ready" && s.suggestedAlt
+    );
+    if (readySuggestions.length === 0) return;
+    await saveBatch(readySuggestions);
   };
   const handleCancel = () => {
     cancelRef.current = true;
+    setIsCancelling(true);
   };
   const handleUpdateSuggestion = (id, newAlt) => {
     setSuggestions((prev) => {
@@ -480,7 +487,7 @@ var AltTextModal = ({
                     {
                       onClick: handleGenerateAll,
                       disabled: isGenerating || safeImages.length === 0,
-                      children: isGenerating ? `Generating & saving... (${progress.current}/${progress.total})` : "Generate All"
+                      children: isGenerating ? `Generating... (${progress.current}/${progress.total})` : "Generate All"
                     }
                   ),
                   isGenerating && /* @__PURE__ */ jsx2(
@@ -488,7 +495,16 @@ var AltTextModal = ({
                     {
                       onClick: handleCancel,
                       buttonStyle: "secondary",
-                      children: "Cancel"
+                      disabled: isCancelling,
+                      children: isCancelling ? "Cancelling..." : "Cancel"
+                    }
+                  ),
+                  !isGenerating && Array.from(suggestions.values()).some((s) => s.status === "ready") && /* @__PURE__ */ jsx2(
+                    Button2,
+                    {
+                      onClick: handleSaveAll,
+                      buttonStyle: "secondary",
+                      children: "Save All"
                     }
                   ),
                   savedCount > 0 && /* @__PURE__ */ jsxs2("span", { style: { fontSize: "0.875rem", color: "var(--theme-success-500)" }, children: [
@@ -511,7 +527,7 @@ var AltTextModal = ({
                         image,
                         suggestion: suggestions.get(image.id),
                         collectionSlug,
-                        onGenerate: () => generateAndSave(image),
+                        onGenerate: () => generateAltText(image),
                         onUpdate: (newAlt) => handleUpdateSuggestion(image.id, newAlt),
                         onSave: (newAlt) => handleSaveAlt(image.id, newAlt)
                       },
@@ -627,7 +643,7 @@ var AltTextGenerator = ({
 };
 
 // src/components/GenerateAltButton.tsx
-import { useState as useState4, useRef as useRef3 } from "react";
+import { useState as useState4, useRef as useRef2 } from "react";
 import { useDocumentInfo } from "@payloadcms/ui";
 import { useParams } from "next/navigation";
 import { jsx as jsx4, jsxs as jsxs4 } from "react/jsx-runtime";
@@ -638,7 +654,7 @@ var GenerateAltButton = ({
   const [isGenerating, setIsGenerating] = useState4(false);
   const documentInfo = useDocumentInfo();
   const params = useParams();
-  const buttonRef = useRef3(null);
+  const buttonRef = useRef2(null);
   const id = documentInfo?.id || params?.segments?.at(-1);
   const isNewDocument = !id || id === "create";
   if (isNewDocument) {

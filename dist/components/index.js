@@ -49,7 +49,12 @@ var ImageRow = ({
 }) => {
   const status = suggestion?.status || "pending";
   const [isSaving, setIsSaving] = (0, import_react.useState)(false);
-  const originalValueRef = (0, import_react.useRef)(suggestion?.suggestedAlt || "");
+  const handleSave = async () => {
+    if (!suggestion?.suggestedAlt) return;
+    setIsSaving(true);
+    await onSave(suggestion.suggestedAlt);
+    setIsSaving(false);
+  };
   const statusColors = {
     pending: "var(--theme-elevation-400)",
     generating: "var(--theme-warning-500)",
@@ -165,18 +170,6 @@ var ImageRow = ({
               onChange: (e) => {
                 onUpdate(e.target.value);
               },
-              onFocus: () => {
-                originalValueRef.current = suggestion.suggestedAlt;
-              },
-              onBlur: async (e) => {
-                const newValue = e.target.value;
-                if (newValue !== originalValueRef.current) {
-                  setIsSaving(true);
-                  await onSave(newValue);
-                  setIsSaving(false);
-                  originalValueRef.current = newValue;
-                }
-              },
               disabled: isSaving,
               placeholder: "Alt text...",
               "aria-label": `Alt text for ${image.filename}`,
@@ -214,6 +207,16 @@ var ImageRow = ({
           status === "pending" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_ui.Button, { onClick: onGenerate, buttonStyle: "secondary", size: "small", children: "Generate" }),
           status === "generating" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontSize: "0.75rem", color: "var(--theme-warning-500)" }, children: "Loading..." }),
           status === "error" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_ui.Button, { onClick: onGenerate, buttonStyle: "secondary", size: "small", children: "Retry" }),
+          status === "ready" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+            import_ui.Button,
+            {
+              onClick: handleSave,
+              buttonStyle: "secondary",
+              size: "small",
+              disabled: isSaving,
+              children: isSaving ? "Saving..." : "Save"
+            }
+          ),
           status === "saved" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
             "span",
             {
@@ -255,6 +258,7 @@ var AltTextModal = ({
     /* @__PURE__ */ new Map()
   );
   const [isGenerating, setIsGenerating] = (0, import_react2.useState)(false);
+  const [isCancelling, setIsCancelling] = (0, import_react2.useState)(false);
   const [progress, setProgress] = (0, import_react2.useState)({ current: 0, total: 0 });
   const cancelRef = (0, import_react2.useRef)(false);
   (0, import_react2.useEffect)(() => {
@@ -361,15 +365,9 @@ var AltTextModal = ({
     } catch {
     }
   };
-  const generateAndSave = async (image) => {
-    const result = await generateAltText(image);
-    if (result.status === "ready" && result.suggestedAlt) {
-      await saveBatch([result]);
-    }
-    return result;
-  };
   const handleGenerateAll = async () => {
     cancelRef.current = false;
+    setIsCancelling(false);
     setIsGenerating(true);
     setProgress({ current: 0, total: safeImages.length });
     for (let i = 0; i < safeImages.length; i += batchSize) {
@@ -377,16 +375,25 @@ var AltTextModal = ({
         break;
       }
       const batch = safeImages.slice(i, i + batchSize);
-      await Promise.all(batch.map(generateAndSave));
+      await Promise.all(batch.map(generateAltText));
       setProgress((prev) => ({
         ...prev,
         current: Math.min(i + batchSize, safeImages.length)
       }));
     }
     setIsGenerating(false);
+    setIsCancelling(false);
+  };
+  const handleSaveAll = async () => {
+    const readySuggestions = Array.from(suggestions.values()).filter(
+      (s) => s.status === "ready" && s.suggestedAlt
+    );
+    if (readySuggestions.length === 0) return;
+    await saveBatch(readySuggestions);
   };
   const handleCancel = () => {
     cancelRef.current = true;
+    setIsCancelling(true);
   };
   const handleUpdateSuggestion = (id, newAlt) => {
     setSuggestions((prev) => {
@@ -508,7 +515,7 @@ var AltTextModal = ({
                     {
                       onClick: handleGenerateAll,
                       disabled: isGenerating || safeImages.length === 0,
-                      children: isGenerating ? `Generating & saving... (${progress.current}/${progress.total})` : "Generate All"
+                      children: isGenerating ? `Generating... (${progress.current}/${progress.total})` : "Generate All"
                     }
                   ),
                   isGenerating && /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(
@@ -516,7 +523,16 @@ var AltTextModal = ({
                     {
                       onClick: handleCancel,
                       buttonStyle: "secondary",
-                      children: "Cancel"
+                      disabled: isCancelling,
+                      children: isCancelling ? "Cancelling..." : "Cancel"
+                    }
+                  ),
+                  !isGenerating && Array.from(suggestions.values()).some((s) => s.status === "ready") && /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(
+                    import_ui2.Button,
+                    {
+                      onClick: handleSaveAll,
+                      buttonStyle: "secondary",
+                      children: "Save All"
                     }
                   ),
                   savedCount > 0 && /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("span", { style: { fontSize: "0.875rem", color: "var(--theme-success-500)" }, children: [
@@ -539,7 +555,7 @@ var AltTextModal = ({
                         image,
                         suggestion: suggestions.get(image.id),
                         collectionSlug,
-                        onGenerate: () => generateAndSave(image),
+                        onGenerate: () => generateAltText(image),
                         onUpdate: (newAlt) => handleUpdateSuggestion(image.id, newAlt),
                         onSave: (newAlt) => handleSaveAlt(image.id, newAlt)
                       },

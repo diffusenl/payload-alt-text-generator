@@ -142,10 +142,19 @@ export const generateAlt = (
       }
 
       // Build prompt with replacements
-      const prompt = options.prompt
+      let prompt = options.prompt
         .replace(/{filename}/g, filename || 'unknown')
         .replace(/{maxLength}/g, String(options.maxLength))
         .replace(/{language}/g, options.language)
+
+      // Append extended prompt if provided
+      if (options.extendPrompt) {
+        const extendedPart = options.extendPrompt
+          .replace(/{filename}/g, filename || 'unknown')
+          .replace(/{maxLength}/g, String(options.maxLength))
+          .replace(/{language}/g, options.language)
+        prompt = `${prompt}\n\n${extendedPart}`
+      }
 
       // Call the AI provider
       const result = await aiProvider.generateAltText({

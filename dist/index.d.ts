@@ -29,6 +29,12 @@ interface AltTextGeneratorPluginOptions {
      */
     prompt?: string;
     /**
+     * Additional context to append to the prompt
+     * Use this to provide extra instructions like brand guidelines, tone, or domain-specific context
+     * Supports {filename}, {maxLength}, and {language} placeholders
+     */
+    extendPrompt?: string;
+    /**
      * Maximum length for generated alt text
      * @default 125
      */

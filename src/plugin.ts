@@ -24,6 +24,7 @@ Rules:
 - The filename often contains the subject — use it as a strong hint
 
 Respond with ONLY the alt text, nothing else.`,
+  extendPrompt: '',
   maxLength: 80,
   batchSize: 5,
   model: 'gpt-4o-mini',

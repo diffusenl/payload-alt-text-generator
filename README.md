@@ -18,8 +18,9 @@ Automatically generate accessible, SEO-friendly alt text for your images using y
 - **Multi-language Support** - Generate alt text in any language
 - **Smart Prompts** - Uses filename context for better results
 - **Review & Edit** - Review AI suggestions before saving
+- **Manual Save Control** - Generate all, review, then save individually or all at once
 - **Rate Limit Handling** - Automatic retry with exponential backoff
-- **Auto-save** - Each image saves immediately after generation
+- **Extend Prompt** - Add custom context to the default prompt without replacing it
 - **Accessible UI** - Keyboard navigation, screen reader support, reduced motion
 
 ## Requirements
@@ -142,6 +143,7 @@ altTextGeneratorPlugin({
 | `batchSize` | `number` | `5` | Number of images to process in parallel |
 | `altFieldName` | `string` | `'alt'` | Field name for alt text in your collection |
 | `prompt` | `string` | See below | Custom prompt template for the AI |
+| `extendPrompt` | `string` | `''` | Additional context appended to the default prompt |
 
 ## AI Providers
 
@@ -250,7 +252,24 @@ Rules:
 Respond with ONLY the alt text, nothing else.
 ```
 
+### Extending the Default Prompt
+
+Use `extendPrompt` to add extra context without replacing the default prompt:
+
+```typescript
+altTextGeneratorPlugin({
+  extendPrompt: `Additional context:
+- This is a healthcare website, use medical terminology appropriately
+- Brand name is "MedCare" - always capitalize it
+- Prefer formal tone`,
+})
+```
+
+The `extendPrompt` is appended to the default prompt and supports the same placeholders: `{filename}`, `{maxLength}`, and `{language}`.
+
 ### Custom Prompt Example
+
+If you need full control, replace the entire prompt:
 
 ```typescript
 altTextGeneratorPlugin({
@@ -274,9 +293,9 @@ Return ONLY the alt text.`,
 1. Navigate to your Media collection in the admin panel
 2. Click the **"Generate Missing Alt Texts"** button (shows count of images needing alt text)
 3. A modal opens displaying all images without alt text
-4. Click **"Generate All"** to process all images
+4. Click **"Generate All"** to process all images (or generate individually)
 5. Review and edit suggestions inline if needed
-6. Changes auto-save, or edit and blur to save individual changes
+6. Click **"Save"** on individual images or **"Save All"** to save all generated alt texts
 
 ### Single Image Generation (Edit View)
 
@@ -318,10 +337,10 @@ Large images are automatically handled:
 
 The plugin is optimized for performance:
 
-- **Immediate saves**: Each image saves right after generation
 - **Lazy thumbnails**: Modal thumbnails load on scroll
 - **Efficient queries**: Only fetches required fields (`id`, `filename`, `url`, `alt`)
 - **Smart batching**: Processes images in configurable batch sizes
+- **Bulk save**: Save all generated alt texts in a single request
 
 ## Accessibility
 

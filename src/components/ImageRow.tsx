@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useRef } from 'react'
+import React, { useState } from 'react'
 import { Button } from '@payloadcms/ui'
 import type { ImageWithoutAlt, AltTextSuggestion } from '../types'
 
@@ -22,7 +22,13 @@ export const ImageRow: React.FC<ImageRowProps> = ({
 }) => {
   const status = suggestion?.status || 'pending'
   const [isSaving, setIsSaving] = useState(false)
-  const originalValueRef = useRef(suggestion?.suggestedAlt || '')
+
+  const handleSave = async () => {
+    if (!suggestion?.suggestedAlt) return
+    setIsSaving(true)
+    await onSave(suggestion.suggestedAlt)
+    setIsSaving(false)
+  }
 
   const statusColors: Record<string, string> = {
     pending: 'var(--theme-elevation-400)',
@@ -130,18 +136,6 @@ export const ImageRow: React.FC<ImageRowProps> = ({
             onChange={(e) => {
               onUpdate(e.target.value)
             }}
-            onFocus={() => {
-              originalValueRef.current = suggestion.suggestedAlt
-            }}
-            onBlur={async (e) => {
-              const newValue = e.target.value
-              if (newValue !== originalValueRef.current) {
-                setIsSaving(true)
-                await onSave(newValue)
-                setIsSaving(false)
-                originalValueRef.current = newValue
-              }
-            }}
             disabled={isSaving}
             placeholder="Alt text..."
             aria-label={`Alt text for ${image.filename}`}
@@ -191,6 +185,17 @@ export const ImageRow: React.FC<ImageRowProps> = ({
         {status === 'error' && (
           <Button onClick={onGenerate} buttonStyle="secondary" size="small">
             Retry
+          </Button>
+        )}
+
+        {status === 'ready' && (
+          <Button
+            onClick={handleSave}
+            buttonStyle="secondary"
+            size="small"
+            disabled={isSaving}
+          >
+            {isSaving ? 'Saving...' : 'Save'}
           </Button>
         )}
 

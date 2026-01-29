@@ -25,6 +25,7 @@ export const AltTextModal: React.FC<AltTextModalProps> = ({
     new Map()
   )
   const [isGenerating, setIsGenerating] = useState(false)
+  const [isCancelling, setIsCancelling] = useState(false)
   const [progress, setProgress] = useState({ current: 0, total: 0 })
   const cancelRef = useRef(false)
 
@@ -156,17 +157,9 @@ export const AltTextModal: React.FC<AltTextModalProps> = ({
     }
   }
 
-  // Generate and save a single image
-  const generateAndSave = async (image: ImageWithoutAlt): Promise<AltTextSuggestion> => {
-    const result = await generateAltText(image)
-    if (result.status === 'ready' && result.suggestedAlt) {
-      await saveBatch([result])
-    }
-    return result
-  }
-
   const handleGenerateAll = async () => {
     cancelRef.current = false
+    setIsCancelling(false)
     setIsGenerating(true)
     setProgress({ current: 0, total: safeImages.length })
 
@@ -177,8 +170,8 @@ export const AltTextModal: React.FC<AltTextModalProps> = ({
       }
 
       const batch = safeImages.slice(i, i + batchSize)
-      // Generate and save each image immediately after completion
-      await Promise.all(batch.map(generateAndSave))
+      // Generate alt text only (no auto-save)
+      await Promise.all(batch.map(generateAltText))
       setProgress((prev) => ({
         ...prev,
         current: Math.min(i + batchSize, safeImages.length),
@@ -186,10 +179,20 @@ export const AltTextModal: React.FC<AltTextModalProps> = ({
     }
 
     setIsGenerating(false)
+    setIsCancelling(false)
+  }
+
+  const handleSaveAll = async () => {
+    const readySuggestions = Array.from(suggestions.values()).filter(
+      (s) => s.status === 'ready' && s.suggestedAlt
+    )
+    if (readySuggestions.length === 0) return
+    await saveBatch(readySuggestions)
   }
 
   const handleCancel = () => {
     cancelRef.current = true
+    setIsCancelling(true)
   }
 
   const handleUpdateSuggestion = (id: string, newAlt: string) => {
@@ -306,7 +309,7 @@ export const AltTextModal: React.FC<AltTextModalProps> = ({
               disabled={isGenerating || safeImages.length === 0}
             >
               {isGenerating
-                ? `Generating & saving... (${progress.current}/${progress.total})`
+                ? `Generating... (${progress.current}/${progress.total})`
                 : 'Generate All'}
             </Button>
 
@@ -314,8 +317,18 @@ export const AltTextModal: React.FC<AltTextModalProps> = ({
               <Button
                 onClick={handleCancel}
                 buttonStyle="secondary"
+                disabled={isCancelling}
               >
-                Cancel
+                {isCancelling ? 'Cancelling...' : 'Cancel'}
+              </Button>
+            )}
+
+            {!isGenerating && Array.from(suggestions.values()).some((s) => s.status === 'ready') && (
+              <Button
+                onClick={handleSaveAll}
+                buttonStyle="secondary"
+              >
+                Save All
               </Button>
             )}
 
@@ -340,7 +353,7 @@ export const AltTextModal: React.FC<AltTextModalProps> = ({
                 image={image}
                 suggestion={suggestions.get(image.id)}
                 collectionSlug={collectionSlug}
-                onGenerate={() => generateAndSave(image)}
+                onGenerate={() => generateAltText(image)}
                 onUpdate={(newAlt) => handleUpdateSuggestion(image.id, newAlt)}
                 onSave={(newAlt) => handleSaveAlt(image.id, newAlt)}
               />

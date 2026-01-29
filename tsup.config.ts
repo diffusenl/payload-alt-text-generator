@@ -22,6 +22,7 @@ export default defineConfig([
     dts: true,
     splitting: false,
     sourcemap: true,
+    clean: false,
     external: ['react', 'react-dom', 'payload', '@payloadcms/ui', /^@payloadcms\/.*/, 'next', /^next\/.*/],
     banner: {
       js: '"use client";',

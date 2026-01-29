@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { Button } from '@payloadcms/ui'
 import { ImageRow } from './ImageRow'
 import type { ImageWithoutAlt, AltTextSuggestion } from '../types'
@@ -26,6 +26,7 @@ export const AltTextModal: React.FC<AltTextModalProps> = ({
   )
   const [isGenerating, setIsGenerating] = useState(false)
   const [progress, setProgress] = useState({ current: 0, total: 0 })
+  const cancelRef = useRef(false)
 
   useEffect(() => {
     const handleEscape = (e: KeyboardEvent) => {
@@ -59,6 +60,9 @@ export const AltTextModal: React.FC<AltTextModalProps> = ({
     })
 
     try {
+      const controller = new AbortController()
+      const timeoutId = setTimeout(() => controller.abort(), 120000) // 2 min timeout for large images
+
       const response = await fetch(`/api/${collectionSlug}/generate-alt`, {
         method: 'POST',
         credentials: 'include',
@@ -68,12 +72,14 @@ export const AltTextModal: React.FC<AltTextModalProps> = ({
           imageUrl: image.url,
           filename: image.filename,
         }),
+        signal: controller.signal,
       })
 
+      clearTimeout(timeoutId)
       const data = await response.json()
 
       if (!response.ok) {
-        throw new Error(data.error || 'Failed to generate')
+        throw new Error(data.details || data.error || 'Failed to generate')
       }
 
       const suggestion: AltTextSuggestion = {
@@ -92,13 +98,17 @@ export const AltTextModal: React.FC<AltTextModalProps> = ({
 
       return suggestion
     } catch (error) {
+      const errorMessage = error instanceof Error
+        ? (error.name === 'AbortError' ? 'Request timed out' : error.message)
+        : String(error)
+
       const errorSuggestion: AltTextSuggestion = {
         id: image.id,
         filename: image.filename,
         imageUrl: image.url,
         suggestedAlt: '',
         status: 'error',
-        error: String(error),
+        error: `Error: ${errorMessage}`,
       }
 
       setSuggestions((prev) => {
@@ -127,8 +137,9 @@ export const AltTextModal: React.FC<AltTextModalProps> = ({
         }),
       })
 
+      const data = await response.json()
+
       if (response.ok) {
-        const data = await response.json()
         setSuggestions((prev) => {
           const next = new Map(prev)
           for (const id of data.success || []) {
@@ -140,21 +151,34 @@ export const AltTextModal: React.FC<AltTextModalProps> = ({
           return next
         })
       }
-    } catch (error) {
-      console.error('Failed to save batch:', error)
+    } catch {
+      // Silently fail - user will see the image wasn't saved
     }
   }
 
+  // Generate and save a single image
+  const generateAndSave = async (image: ImageWithoutAlt): Promise<AltTextSuggestion> => {
+    const result = await generateAltText(image)
+    if (result.status === 'ready' && result.suggestedAlt) {
+      await saveBatch([result])
+    }
+    return result
+  }
+
   const handleGenerateAll = async () => {
+    cancelRef.current = false
     setIsGenerating(true)
     setProgress({ current: 0, total: safeImages.length })
 
     for (let i = 0; i < safeImages.length; i += batchSize) {
+      // Check if cancelled before starting next batch
+      if (cancelRef.current) {
+        break
+      }
+
       const batch = safeImages.slice(i, i + batchSize)
-      // Generate all in parallel
-      const results = await Promise.all(batch.map(generateAltText))
-      // Batch save all successful generations
-      await saveBatch(results)
+      // Generate and save each image immediately after completion
+      await Promise.all(batch.map(generateAndSave))
       setProgress((prev) => ({
         ...prev,
         current: Math.min(i + batchSize, safeImages.length),
@@ -162,7 +186,10 @@ export const AltTextModal: React.FC<AltTextModalProps> = ({
     }
 
     setIsGenerating(false)
-    onComplete()
+  }
+
+  const handleCancel = () => {
+    cancelRef.current = true
   }
 
   const handleUpdateSuggestion = (id: string, newAlt: string) => {
@@ -283,6 +310,15 @@ export const AltTextModal: React.FC<AltTextModalProps> = ({
                 : 'Generate All'}
             </Button>
 
+            {isGenerating && (
+              <Button
+                onClick={handleCancel}
+                buttonStyle="secondary"
+              >
+                Cancel
+              </Button>
+            )}
+
             {savedCount > 0 && (
               <span style={{ fontSize: '0.875rem', color: 'var(--theme-success-500)' }}>
                 {savedCount} saved
@@ -304,7 +340,7 @@ export const AltTextModal: React.FC<AltTextModalProps> = ({
                 image={image}
                 suggestion={suggestions.get(image.id)}
                 collectionSlug={collectionSlug}
-                onGenerate={() => generateAltText(image)}
+                onGenerate={() => generateAndSave(image)}
                 onUpdate={(newAlt) => handleUpdateSuggestion(image.id, newAlt)}
                 onSave={(newAlt) => handleSaveAlt(image.id, newAlt)}
               />

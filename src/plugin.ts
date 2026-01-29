@@ -59,7 +59,7 @@ export const altTextGeneratorPlugin = (
               afterInput: [
                 ...existingAfterInput,
                 {
-                  path: 'payload-alt-text-generator/components#GenerateAltButton',
+                  path: '@diffusenl/payload-alt-text-generator/components#GenerateAltButton',
                   clientProps: {
                     collectionSlug: collection.slug,
                     altFieldName: options.altFieldName,
@@ -104,7 +104,7 @@ export const altTextGeneratorPlugin = (
             beforeListTable: [
               ...(collection.admin?.components?.beforeListTable || []),
               {
-                path: 'payload-alt-text-generator/components#AltTextGenerator',
+                path: '@diffusenl/payload-alt-text-generator/components#AltTextGenerator',
                 clientProps: {
                   collectionSlug: collection.slug,
                   options: {

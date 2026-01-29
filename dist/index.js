@@ -35,6 +35,11 @@ __export(src_exports, {
 module.exports = __toCommonJS(src_exports);
 
 // src/endpoints/getMissingAlt.ts
+var IMAGE_EXTENSIONS = ["jpg", "jpeg", "png", "gif", "webp", "avif", "bmp", "tiff", "tif", "svg"];
+function isImageFile(filename) {
+  const ext = filename.split(".").pop()?.toLowerCase() || "";
+  return IMAGE_EXTENSIONS.includes(ext);
+}
 var getMissingAlt = (options) => {
   return async (req) => {
     const { payload, user } = req;
@@ -42,16 +47,32 @@ var getMissingAlt = (options) => {
       return Response.json({ error: "Unauthorized" }, { status: 401 });
     }
     const collectionSlug = req.routeParams?.collection || options.collections[0];
+    const countOnly = req.searchParams?.get("countOnly") === "true";
     try {
+      const whereClause = {
+        or: [
+          { [options.altFieldName]: { equals: "" } },
+          { [options.altFieldName]: { equals: null } },
+          { [options.altFieldName]: { exists: false } }
+        ]
+      };
+      if (countOnly) {
+        const files = await payload.find({
+          collection: collectionSlug,
+          where: whereClause,
+          limit: 500,
+          depth: 0,
+          select: { filename: true }
+        });
+        const imageCount = files.docs.filter((doc) => {
+          const filename = doc.filename;
+          return filename && isImageFile(filename);
+        }).length;
+        return Response.json({ totalDocs: imageCount });
+      }
       const images = await payload.find({
         collection: collectionSlug,
-        where: {
-          or: [
-            { [options.altFieldName]: { equals: "" } },
-            { [options.altFieldName]: { equals: null } },
-            { [options.altFieldName]: { exists: false } }
-          ]
-        },
+        where: whereClause,
         limit: 500,
         depth: 0,
         select: {
@@ -61,14 +82,18 @@ var getMissingAlt = (options) => {
           [options.altFieldName]: true
         }
       });
+      const imageDocs = images.docs.filter((img) => {
+        const filename = img.filename;
+        return filename && isImageFile(filename);
+      }).map((img) => ({
+        id: img.id,
+        filename: img.filename,
+        url: img.url,
+        alt: img[options.altFieldName] || null
+      }));
       return Response.json({
-        docs: images.docs.map((img) => ({
-          id: img.id,
-          filename: img.filename,
-          url: img.url,
-          alt: img[options.altFieldName] || null
-        })),
-        totalDocs: images.totalDocs
+        docs: imageDocs,
+        totalDocs: imageDocs.length
       });
     } catch (error) {
       console.error("[alt-text-generator] Error fetching images:", error);
@@ -79,6 +104,22 @@ var getMissingAlt = (options) => {
 
 // src/endpoints/generateAlt.ts
 var import_sdk = __toESM(require("@anthropic-ai/sdk"));
+var import_sharp = __toESM(require("sharp"));
+function deriveAltFromFilename(filename) {
+  const basename = filename.split("/").pop() || filename;
+  const nameWithoutExt = basename.replace(/\.[^.]+$/, "");
+  const spaced = nameWithoutExt.replace(/[-_]/g, " ").replace(/([a-z])([A-Z])/g, "$1 $2").toLowerCase();
+  const cleaned = spaced.replace(/\s+/g, " ").trim();
+  const isIcon = /icon|ico$/i.test(nameWithoutExt);
+  const isLogo = /logo/i.test(nameWithoutExt);
+  if (isIcon && !cleaned.includes("icon")) {
+    return `${cleaned} icon`;
+  }
+  if (isLogo && !cleaned.includes("logo")) {
+    return `${cleaned} logo`;
+  }
+  return cleaned;
+}
 var generateAlt = (options) => {
   return async (req) => {
     const { user } = req;
@@ -91,6 +132,27 @@ var generateAlt = (options) => {
       return Response.json({ error: "Image URL is required" }, { status: 400 });
     }
     try {
+      const urlPath = imageUrl.split("?")[0].toLowerCase();
+      const filenameLower = (filename || "").toLowerCase();
+      const ext = filenameLower.split(".").pop() || urlPath.split(".").pop() || "";
+      const imageExtensions = ["jpg", "jpeg", "png", "gif", "webp", "avif", "bmp", "tiff", "tif", "svg"];
+      const isImage = imageExtensions.includes(ext);
+      if (!isImage) {
+        return Response.json({
+          error: "Not an image",
+          details: `File type ".${ext}" is not supported. Only images can have alt text generated.`
+        }, { status: 400 });
+      }
+      const isSvg = ext === "svg";
+      if (isSvg) {
+        const suggestedAlt2 = deriveAltFromFilename(filename || imageUrl);
+        return Response.json({
+          id: imageId,
+          filename,
+          suggestedAlt: suggestedAlt2,
+          imageUrl
+        });
+      }
       const anthropic = new import_sdk.default({
         apiKey: process.env.ANTHROPIC_API_KEY
       });
@@ -104,37 +166,65 @@ var generateAlt = (options) => {
       if (!imageResponse.ok) {
         throw new Error(`Failed to fetch image: ${imageResponse.status}`);
       }
-      const imageBuffer = await imageResponse.arrayBuffer();
-      const base64Image = Buffer.from(imageBuffer).toString("base64");
+      let imageBuffer = Buffer.from(await imageResponse.arrayBuffer());
+      let wasResized = false;
+      const metadata = await (0, import_sharp.default)(imageBuffer).metadata();
+      const MAX_SIZE = 4 * 1024 * 1024;
+      const MAX_DIMENSION = 7500;
+      const needsResize = imageBuffer.byteLength > MAX_SIZE || metadata.width && metadata.width > MAX_DIMENSION || metadata.height && metadata.height > MAX_DIMENSION;
+      if (needsResize) {
+        imageBuffer = await (0, import_sharp.default)(imageBuffer).resize(1600, 1600, { fit: "inside", withoutEnlargement: true }).jpeg({ quality: 80 }).toBuffer();
+        wasResized = true;
+      }
+      const base64Image = imageBuffer.toString("base64");
       const contentType = imageResponse.headers.get("content-type") || "";
       let mediaType = "image/jpeg";
-      if (contentType.includes("png")) mediaType = "image/png";
-      else if (contentType.includes("webp")) mediaType = "image/webp";
-      else if (contentType.includes("gif")) mediaType = "image/gif";
+      if (!wasResized) {
+        if (contentType.includes("png")) mediaType = "image/png";
+        else if (contentType.includes("webp")) mediaType = "image/webp";
+        else if (contentType.includes("gif")) mediaType = "image/gif";
+      }
       const prompt = options.prompt.replace(/{filename}/g, filename || "unknown").replace(/{maxLength}/g, String(options.maxLength)).replace(/{language}/g, options.language);
-      const message = await anthropic.messages.create({
-        model: options.model,
-        max_tokens: 300,
-        messages: [
-          {
-            role: "user",
-            content: [
+      let message;
+      let retries = 0;
+      const maxRetries = 3;
+      while (retries <= maxRetries) {
+        try {
+          message = await anthropic.messages.create({
+            model: options.model,
+            max_tokens: 100,
+            messages: [
               {
-                type: "image",
-                source: {
-                  type: "base64",
-                  media_type: mediaType,
-                  data: base64Image
-                }
-              },
-              {
-                type: "text",
-                text: prompt
+                role: "user",
+                content: [
+                  {
+                    type: "image",
+                    source: {
+                      type: "base64",
+                      media_type: mediaType,
+                      data: base64Image
+                    }
+                  },
+                  {
+                    type: "text",
+                    text: prompt
+                  }
+                ]
               }
             ]
+          });
+          break;
+        } catch (err) {
+          const isRateLimit = err instanceof Error && err.message.includes("429");
+          if (isRateLimit && retries < maxRetries) {
+            const delay = Math.pow(2, retries) * 15e3;
+            await new Promise((resolve) => setTimeout(resolve, delay));
+            retries++;
+          } else {
+            throw err;
           }
-        ]
-      });
+        }
+      }
       const suggestedAlt = message.content[0].type === "text" ? message.content[0].text.trim().slice(0, options.maxLength) : "";
       return Response.json({
         id: imageId,
@@ -143,9 +233,10 @@ var generateAlt = (options) => {
         imageUrl
       });
     } catch (error) {
-      console.error("[alt-text-generator] Error generating alt text:", error);
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      console.error("[alt-text-generator] Error generating alt text:", errorMessage);
       return Response.json(
-        { error: "Failed to generate alt text", details: String(error) },
+        { error: "Failed to generate alt text", details: errorMessage },
         { status: 500 }
       );
     }
@@ -275,7 +366,7 @@ var altTextGeneratorPlugin = (pluginOptions = {}) => {
               afterInput: [
                 ...existingAfterInput,
                 {
-                  path: "payload-alt-text-generator/components#GenerateAltButton",
+                  path: "@diffusenl/payload-alt-text-generator/components#GenerateAltButton",
                   clientProps: {
                     collectionSlug: collection.slug,
                     altFieldName: options.altFieldName
@@ -319,7 +410,7 @@ var altTextGeneratorPlugin = (pluginOptions = {}) => {
             beforeListTable: [
               ...collection.admin?.components?.beforeListTable || [],
               {
-                path: "payload-alt-text-generator/components#AltTextGenerator",
+                path: "@diffusenl/payload-alt-text-generator/components#AltTextGenerator",
                 clientProps: {
                   collectionSlug: collection.slug,
                   options: {

@@ -11,11 +11,14 @@ Automatically generate accessible, SEO-friendly alt text for your images using A
 
 - **Bulk Generation** - Process hundreds of images missing alt text in one click
 - **Single Image Generation** - Generate alt text directly on individual media pages
+- **Cancellable** - Cancel batch generation at any time, already-saved images are kept
+- **Auto-resize** - Large images are automatically resized before processing
+- **SVG Support** - SVG files get alt text derived from filename
 - **Multi-language Support** - Generate alt text in any language
 - **Smart Prompts** - Uses filename context for better results
 - **Review & Edit** - Review AI suggestions before saving
-- **Batch Processing** - Parallel processing for faster generation
-- **Auto-save** - Generated alt texts are saved automatically
+- **Rate Limit Handling** - Automatic retry with exponential backoff
+- **Auto-save** - Each image saves immediately after generation
 - **Accessible UI** - Keyboard navigation, screen reader support, reduced motion
 
 ## Requirements
@@ -211,14 +214,31 @@ The plugin adds these endpoints to your configured collections:
 | `/api/{collection}/save-alt` | POST | Save alt text for a single image |
 | `/api/{collection}/save-bulk-alt` | POST | Save alt text for multiple images |
 
+## Supported File Types
+
+The plugin only processes image files:
+
+- **Supported**: jpg, jpeg, png, gif, webp, avif, bmp, tiff, svg
+- **Not supported**: Videos (mp4, mov), PDFs, documents, etc.
+
+Non-image files are automatically filtered from the "missing alt text" list.
+
+### Image Limitations
+
+Large images are automatically handled:
+
+- **File size > 4MB**: Resized to 1600×1600 max
+- **Dimensions > 7500px**: Resized to 1600×1600 max
+- **SVG files**: Alt text derived from filename (Claude doesn't support SVG)
+
 ## Performance
 
 The plugin is optimized for performance:
 
-- **Parallel generation**: Images are processed in parallel batches
-- **Bulk saves**: Multiple updates are saved in a single database operation
+- **Immediate saves**: Each image saves right after generation
+- **Lazy thumbnails**: Modal thumbnails load on scroll
 - **Efficient queries**: Only fetches required fields (`id`, `filename`, `url`, `alt`)
-- **Lazy loading**: Components only load when needed
+- **Smart batching**: Processes images in configurable batch sizes
 
 ## Accessibility
 
@@ -232,9 +252,10 @@ The plugin UI follows web accessibility guidelines:
 
 ## Troubleshooting
 
-### "Generate with AI" button doesn't update the field
+### "Generate with AI" button doesn't appear
 
-Make sure you've run `npx payload generate:importmap` after installing the plugin.
+- The button only shows when **editing** existing images, not when uploading new ones
+- Make sure you've run `npx payload generate:importmap` after installing the plugin
 
 ### API returns 401 Unauthorized
 
@@ -244,9 +265,19 @@ The endpoints require authentication. Make sure you're logged into the Payload a
 
 Try customizing the prompt to give Claude more context about your specific use case. The filename is used as a hint, so descriptive filenames help.
 
-### Rate limiting
+### Rate limiting (429 errors)
 
-If processing many images, you may hit Anthropic's rate limits. Reduce `batchSize` to process fewer images in parallel.
+The plugin automatically retries rate-limited requests with exponential backoff (15s, 30s, 60s delays). If you're on Anthropic's free tier (5 requests/minute), set `batchSize: 1`:
+
+```typescript
+altTextGeneratorPlugin({
+  batchSize: 1, // Avoid rate limits on free tier
+})
+```
+
+### Large images fail
+
+Images larger than 4MB or 7500px are automatically resized. If you still see errors, the image may be corrupted or in an unsupported format.
 
 ## TypeScript
 

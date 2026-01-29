@@ -5,7 +5,7 @@ import { useState as useState3, useEffect as useEffect2, useCallback } from "rea
 import { Button as Button3 } from "@payloadcms/ui";
 
 // src/components/AltTextModal.tsx
-import { useState as useState2, useEffect } from "react";
+import { useState as useState2, useEffect, useRef as useRef2 } from "react";
 import { Button as Button2 } from "@payloadcms/ui";
 
 // src/components/ImageRow.tsx
@@ -59,6 +59,8 @@ var ImageRow = ({
                 alt: "",
                 width: 80,
                 height: 60,
+                loading: "lazy",
+                decoding: "async",
                 style: {
                   width: "100%",
                   height: "100%",
@@ -112,12 +114,9 @@ var ImageRow = ({
               ]
             }
           ) : status === "error" ? /* @__PURE__ */ jsx(
-            "input",
+            "div",
             {
-              type: "text",
-              value: "",
-              placeholder: suggestion?.error || "Error generating alt text",
-              disabled: true,
+              role: "alert",
               "aria-label": `Error for ${image.filename}`,
               style: {
                 width: "100%",
@@ -125,8 +124,10 @@ var ImageRow = ({
                 border: "1px solid var(--theme-error-500)",
                 borderRadius: "4px",
                 fontSize: "0.875rem",
-                backgroundColor: "var(--theme-error-50)"
-              }
+                backgroundColor: "var(--theme-error-50)",
+                color: "var(--theme-error-500)"
+              },
+              children: suggestion?.error || "Failed to generate alt text"
             }
           ) : suggestion && (status === "ready" || status === "saved") ? /* @__PURE__ */ jsx(
             "input",
@@ -141,7 +142,7 @@ var ImageRow = ({
               },
               onBlur: async (e) => {
                 const newValue = e.target.value;
-                if (newValue !== originalValueRef.current && newValue.trim()) {
+                if (newValue !== originalValueRef.current) {
                   setIsSaving(true);
                   await onSave(newValue);
                   setIsSaving(false);
@@ -227,6 +228,7 @@ var AltTextModal = ({
   );
   const [isGenerating, setIsGenerating] = useState2(false);
   const [progress, setProgress] = useState2({ current: 0, total: 0 });
+  const cancelRef = useRef2(false);
   useEffect(() => {
     const handleEscape = (e) => {
       if (e.key === "Escape") onClose();
@@ -253,6 +255,8 @@ var AltTextModal = ({
       return next;
     });
     try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 12e4);
       const response = await fetch(`/api/${collectionSlug}/generate-alt`, {
         method: "POST",
         credentials: "include",
@@ -261,11 +265,13 @@ var AltTextModal = ({
           imageId: image.id,
           imageUrl: image.url,
           filename: image.filename
-        })
+        }),
+        signal: controller.signal
       });
+      clearTimeout(timeoutId);
       const data = await response.json();
       if (!response.ok) {
-        throw new Error(data.error || "Failed to generate");
+        throw new Error(data.details || data.error || "Failed to generate");
       }
       const suggestion = {
         id: image.id,
@@ -281,13 +287,14 @@ var AltTextModal = ({
       });
       return suggestion;
     } catch (error) {
+      const errorMessage = error instanceof Error ? error.name === "AbortError" ? "Request timed out" : error.message : String(error);
       const errorSuggestion = {
         id: image.id,
         filename: image.filename,
         imageUrl: image.url,
         suggestedAlt: "",
         status: "error",
-        error: String(error)
+        error: `Error: ${errorMessage}`
       };
       setSuggestions((prev) => {
         const next = new Map(prev);
@@ -310,8 +317,8 @@ var AltTextModal = ({
           collectionSlug
         })
       });
+      const data = await response.json();
       if (response.ok) {
-        const data = await response.json();
         setSuggestions((prev) => {
           const next = new Map(prev);
           for (const id of data.success || []) {
@@ -323,24 +330,35 @@ var AltTextModal = ({
           return next;
         });
       }
-    } catch (error) {
-      console.error("Failed to save batch:", error);
+    } catch {
     }
   };
+  const generateAndSave = async (image) => {
+    const result = await generateAltText(image);
+    if (result.status === "ready" && result.suggestedAlt) {
+      await saveBatch([result]);
+    }
+    return result;
+  };
   const handleGenerateAll = async () => {
+    cancelRef.current = false;
     setIsGenerating(true);
     setProgress({ current: 0, total: safeImages.length });
     for (let i = 0; i < safeImages.length; i += batchSize) {
+      if (cancelRef.current) {
+        break;
+      }
       const batch = safeImages.slice(i, i + batchSize);
-      const results = await Promise.all(batch.map(generateAltText));
-      await saveBatch(results);
+      await Promise.all(batch.map(generateAndSave));
       setProgress((prev) => ({
         ...prev,
         current: Math.min(i + batchSize, safeImages.length)
       }));
     }
     setIsGenerating(false);
-    onComplete();
+  };
+  const handleCancel = () => {
+    cancelRef.current = true;
   };
   const handleUpdateSuggestion = (id, newAlt) => {
     setSuggestions((prev) => {
@@ -465,6 +483,14 @@ var AltTextModal = ({
                       children: isGenerating ? `Generating & saving... (${progress.current}/${progress.total})` : "Generate All"
                     }
                   ),
+                  isGenerating && /* @__PURE__ */ jsx2(
+                    Button2,
+                    {
+                      onClick: handleCancel,
+                      buttonStyle: "secondary",
+                      children: "Cancel"
+                    }
+                  ),
                   savedCount > 0 && /* @__PURE__ */ jsxs2("span", { style: { fontSize: "0.875rem", color: "var(--theme-success-500)" }, children: [
                     savedCount,
                     " saved"
@@ -485,7 +511,7 @@ var AltTextModal = ({
                         image,
                         suggestion: suggestions.get(image.id),
                         collectionSlug,
-                        onGenerate: () => generateAltText(image),
+                        onGenerate: () => generateAndSave(image),
                         onUpdate: (newAlt) => handleUpdateSuggestion(image.id, newAlt),
                         onSave: (newAlt) => handleSaveAlt(image.id, newAlt)
                       },
@@ -508,10 +534,30 @@ var AltTextGenerator = ({
   collectionSlug,
   options
 }) => {
-  const [missingCount, setMissingCount] = useState3(null);
+  const [missingCount, setMissingCount] = useState3(0);
+  const [isLoading, setIsLoading] = useState3(true);
   const [images, setImages] = useState3([]);
   const [isOpen, setIsOpen] = useState3(false);
-  const fetchMissingAlt = useCallback(async () => {
+  const fetchCount = useCallback(async () => {
+    try {
+      const response = await fetch(`/api/${collectionSlug}/missing-alt?countOnly=true`, {
+        credentials: "include"
+      });
+      const data = await response.json();
+      if (data.error) {
+        console.error("API error:", data.error);
+        setMissingCount(0);
+      } else {
+        setMissingCount(data.totalDocs ?? 0);
+      }
+    } catch (error) {
+      console.error("Failed to fetch missing alt count:", error);
+      setMissingCount(0);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [collectionSlug]);
+  const fetchImages = useCallback(async () => {
     try {
       const response = await fetch(`/api/${collectionSlug}/missing-alt`, {
         credentials: "include"
@@ -526,34 +572,31 @@ var AltTextGenerator = ({
       setMissingCount(data.totalDocs ?? 0);
       setImages(data.docs ?? []);
     } catch (error) {
-      console.error("Failed to fetch missing alt count:", error);
+      console.error("Failed to fetch images:", error);
       setMissingCount(0);
       setImages([]);
     }
   }, [collectionSlug]);
   useEffect2(() => {
-    fetchMissingAlt();
-  }, [fetchMissingAlt]);
-  const handleComplete = () => {
-    fetchMissingAlt();
+    fetchCount();
+  }, [fetchCount]);
+  const handleClose = () => {
     setIsOpen(false);
+    fetchCount();
   };
-  if (missingCount === null) {
-    return null;
-  }
   return /* @__PURE__ */ jsxs3("div", { style: { marginBottom: "1rem" }, children: [
     /* @__PURE__ */ jsxs3(
       Button3,
       {
         onClick: async () => {
-          await fetchMissingAlt();
+          await fetchImages();
           setIsOpen(true);
         },
         buttonStyle: "secondary",
-        disabled: missingCount === 0,
+        disabled: isLoading || missingCount === 0,
         children: [
           "Generate Missing Alt Texts",
-          missingCount > 0 && /* @__PURE__ */ jsx3(
+          !isLoading && missingCount > 0 && /* @__PURE__ */ jsx3(
             "span",
             {
               style: {
@@ -576,15 +619,15 @@ var AltTextGenerator = ({
         images,
         collectionSlug,
         batchSize: options.batchSize,
-        onComplete: handleComplete,
-        onClose: () => setIsOpen(false)
+        onComplete: handleClose,
+        onClose: handleClose
       }
     )
   ] });
 };
 
 // src/components/GenerateAltButton.tsx
-import { useState as useState4, useRef as useRef2 } from "react";
+import { useState as useState4, useRef as useRef3 } from "react";
 import { useDocumentInfo } from "@payloadcms/ui";
 import { useParams } from "next/navigation";
 import { jsx as jsx4, jsxs as jsxs4 } from "react/jsx-runtime";
@@ -595,8 +638,12 @@ var GenerateAltButton = ({
   const [isGenerating, setIsGenerating] = useState4(false);
   const documentInfo = useDocumentInfo();
   const params = useParams();
-  const buttonRef = useRef2(null);
+  const buttonRef = useRef3(null);
   const id = documentInfo?.id || params?.segments?.at(-1);
+  const isNewDocument = !id || id === "create";
+  if (isNewDocument) {
+    return null;
+  }
   const updateFieldValue = (value) => {
     const input = document.querySelector(
       `input[name="${altFieldName}"], textarea[name="${altFieldName}"]`

@@ -47,10 +47,18 @@ The package has two separate build outputs configured in `tsup.config.ts`:
 
 ### State Flow
 
-1. `AltTextGenerator` fetches missing images on mount and when modal opens
+1. `AltTextGenerator` fetches count on mount, full images when modal opens
 2. `AltTextModal` manages generation state in a `Map<string, AltTextSuggestion>`
 3. Status progression: `pending` → `generating` → `ready` → `saved` (or `error`)
-4. Batch processing: generates in parallel batches, then bulk saves results
+4. Each image saves immediately after generation (not batched)
+5. Cancellation is supported via `cancelRef` - stops between batches
+
+### Image Processing (`generateAlt.ts`)
+
+1. Non-image files return error immediately
+2. SVGs derive alt text from filename (Claude doesn't support SVG)
+3. Large images (>4MB or >7500px) are auto-resized via `sharp`
+4. Rate limits (429) trigger exponential backoff retry (15s, 30s, 60s)
 
 ## Testing Locally
 

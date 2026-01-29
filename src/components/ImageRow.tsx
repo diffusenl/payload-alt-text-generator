@@ -59,6 +59,8 @@ export const ImageRow: React.FC<ImageRowProps> = ({
           alt=""
           width={80}
           height={60}
+          loading="lazy"
+          decoding="async"
           style={{
             width: '100%',
             height: '100%',
@@ -106,11 +108,8 @@ export const ImageRow: React.FC<ImageRowProps> = ({
             Generating alt text...
           </div>
         ) : status === 'error' ? (
-          <input
-            type="text"
-            value=""
-            placeholder={suggestion?.error || 'Error generating alt text'}
-            disabled
+          <div
+            role="alert"
             aria-label={`Error for ${image.filename}`}
             style={{
               width: '100%',
@@ -119,8 +118,11 @@ export const ImageRow: React.FC<ImageRowProps> = ({
               borderRadius: '4px',
               fontSize: '0.875rem',
               backgroundColor: 'var(--theme-error-50)',
+              color: 'var(--theme-error-500)',
             }}
-          />
+          >
+            {suggestion?.error || 'Failed to generate alt text'}
+          </div>
         ) : suggestion && (status === 'ready' || status === 'saved') ? (
           <input
             type="text"
@@ -133,7 +135,7 @@ export const ImageRow: React.FC<ImageRowProps> = ({
             }}
             onBlur={async (e) => {
               const newValue = e.target.value
-              if (newValue !== originalValueRef.current && newValue.trim()) {
+              if (newValue !== originalValueRef.current) {
                 setIsSaving(true)
                 await onSave(newValue)
                 setIsSaving(false)

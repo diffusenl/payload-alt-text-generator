@@ -21,6 +21,12 @@ export const GenerateAltButton: React.FC<GenerateAltButtonProps> = ({
   // Get ID from documentInfo or fall back to URL params
   const id = documentInfo?.id || (params?.segments as string[] | undefined)?.at(-1)
 
+  // Don't show button for new uploads (only when editing existing documents)
+  const isNewDocument = !id || id === 'create'
+  if (isNewDocument) {
+    return null
+  }
+
   const updateFieldValue = (value: string) => {
     // Find the input field by name attribute
     const input = document.querySelector<HTMLInputElement | HTMLTextAreaElement>(

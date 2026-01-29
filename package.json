@@ -1,6 +1,6 @@
 {
   "name": "@diffusenl/payload-alt-text-generator",
-  "version": "1.0.1",
+  "version": "1.1.0",
   "description": "AI-powered alt text generation for Payload CMS 3.x using Claude Vision API",
   "main": "dist/index.js",
   "module": "dist/index.mjs",
@@ -46,12 +46,12 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/colbe-com/payload-alt-text-generator.git"
+    "url": "git+https://github.com/diffusenl/payload-alt-text-generator.git"
   },
   "bugs": {
-    "url": "https://github.com/colbe-com/payload-alt-text-generator/issues"
+    "url": "https://github.com/diffusenl/payload-alt-text-generator/issues"
   },
-  "homepage": "https://github.com/colbe-com/payload-alt-text-generator#readme",
+  "homepage": "https://github.com/diffusenl/payload-alt-text-generator#readme",
   "engines": {
     "node": ">=18.0.0"
   },
@@ -60,7 +60,8 @@
     "react": "^18.0.0 || ^19.0.0"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.30.0"
+    "@anthropic-ai/sdk": "^0.30.0",
+    "sharp": "^0.34.5"
   },
   "devDependencies": {
     "@payloadcms/ui": "^3.0.0",

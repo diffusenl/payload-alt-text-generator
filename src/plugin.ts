@@ -1,11 +1,16 @@
 import type { Config, Plugin } from 'payload'
-import type { AltTextGeneratorPluginOptions } from './types'
+import type { AltTextGeneratorPluginOptions, ProviderConfig } from './types'
 import { getMissingAlt } from './endpoints/getMissingAlt'
 import { generateAlt } from './endpoints/generateAlt'
 import { saveAlt } from './endpoints/saveAlt'
 import { saveBulkAlt } from './endpoints/saveBulkAlt'
+import { createProvider } from './providers'
 
-const defaultOptions: Required<AltTextGeneratorPluginOptions> = {
+interface InternalOptions extends Required<AltTextGeneratorPluginOptions> {
+  provider: ProviderConfig
+}
+
+const defaultOptions: InternalOptions = {
   collections: ['media'],
   prompt: `Generate a short alt text for this image IN {language}. The filename is "{filename}".
 
@@ -21,15 +26,51 @@ Rules:
 Respond with ONLY the alt text, nothing else.`,
   maxLength: 80,
   batchSize: 5,
-  model: 'claude-sonnet-4-20250514',
+  model: 'gpt-4o-mini',
   altFieldName: 'alt',
   language: 'English',
+  provider: { provider: 'openai' },
+}
+
+/**
+ * Resolve provider configuration with backwards compatibility
+ */
+function resolveProviderConfig(pluginOptions: AltTextGeneratorPluginOptions): ProviderConfig {
+  // If explicit provider config is provided, use it
+  if (pluginOptions.provider) {
+    return pluginOptions.provider
+  }
+
+  // Backwards compatibility: if only model is specified, detect provider from model name
+  if (pluginOptions.model) {
+    console.warn(
+      '[alt-text-generator] The "model" option is deprecated. Use "provider: { provider: \'...\', model: \'...\' }" instead.'
+    )
+    // Detect provider from model name
+    if (pluginOptions.model.startsWith('claude')) {
+      return { provider: 'anthropic', model: pluginOptions.model }
+    } else if (pluginOptions.model.startsWith('gemini')) {
+      return { provider: 'google', model: pluginOptions.model }
+    }
+    return { provider: 'openai', model: pluginOptions.model }
+  }
+
+  // Default to OpenAI (most cost-effective)
+  return { provider: 'openai' }
 }
 
 export const altTextGeneratorPlugin = (
   pluginOptions: AltTextGeneratorPluginOptions = {}
 ): Plugin => {
-  const options = { ...defaultOptions, ...pluginOptions }
+  const providerConfig = resolveProviderConfig(pluginOptions)
+  const options: InternalOptions = {
+    ...defaultOptions,
+    ...pluginOptions,
+    provider: providerConfig,
+  }
+
+  // Create the AI provider instance
+  const aiProvider = createProvider(providerConfig)
 
   return (incomingConfig: Config): Config => {
     // Find and modify the specified collections
@@ -84,7 +125,7 @@ export const altTextGeneratorPlugin = (
           {
             path: '/generate-alt',
             method: 'post' as const,
-            handler: generateAlt(options),
+            handler: generateAlt({ ...options, aiProvider }),
           },
           {
             path: '/save-alt',

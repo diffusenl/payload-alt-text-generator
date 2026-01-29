@@ -1,14 +1,15 @@
-# payload-alt-text-generator
+# @diffusenl/payload-alt-text-generator
 
-[![npm version](https://img.shields.io/npm/v/payload-alt-text-generator.svg)](https://www.npmjs.com/package/payload-alt-text-generator)
+[![npm version](https://img.shields.io/npm/v/@diffusenl/payload-alt-text-generator.svg)](https://www.npmjs.com/package/@diffusenl/payload-alt-text-generator)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 
-AI-powered alt text generation for Payload CMS 3.x using Claude Vision API.
+AI-powered alt text generation for Payload CMS 3.x with multi-provider support.
 
-Automatically generate accessible, SEO-friendly alt text for your images using Anthropic's Claude AI. Works with any image collection in Payload CMS.
+Automatically generate accessible, SEO-friendly alt text for your images using your choice of AI provider: **Anthropic Claude**, **OpenAI GPT-4**, or **Google Gemini**. Works with any image collection in Payload CMS.
 
 ## Features
 
+- **Multi-Provider Support** - Choose from Anthropic Claude, OpenAI GPT-4, or Google Gemini
 - **Bulk Generation** - Process hundreds of images missing alt text in one click
 - **Single Image Generation** - Generate alt text directly on individual media pages
 - **Cancellable** - Cancel batch generation at any time, already-saved images are kept
@@ -25,31 +26,43 @@ Automatically generate accessible, SEO-friendly alt text for your images using A
 
 - Payload CMS 3.x
 - React 18 or 19
-- Anthropic API key ([Get one here](https://console.anthropic.com/))
+- API key for your chosen provider:
+  - **OpenAI** (default): [Get API key](https://platform.openai.com/api-keys)
+  - **Anthropic**: [Get API key](https://console.anthropic.com/)
+  - **Google Gemini**: [Get API key](https://aistudio.google.com/apikey)
 
 ## Installation
 
 ```bash
-npm install payload-alt-text-generator
+npm install @diffusenl/payload-alt-text-generator
 # or
-yarn add payload-alt-text-generator
+yarn add @diffusenl/payload-alt-text-generator
 # or
-pnpm add payload-alt-text-generator
+pnpm add @diffusenl/payload-alt-text-generator
 ```
 
 ## Quick Start
 
-### 1. Add your Anthropic API key
+### 1. Add your API key
+
+Set the environment variable for your chosen provider:
 
 ```env
+# OpenAI (default)
+OPENAI_API_KEY=sk-...
+
+# Or Anthropic
 ANTHROPIC_API_KEY=sk-ant-...
+
+# Or Google Gemini
+GOOGLE_GENERATIVE_AI_API_KEY=...
 ```
 
 ### 2. Add the plugin to your Payload config
 
 ```typescript
 import { buildConfig } from 'payload'
-import { altTextGeneratorPlugin } from 'payload-alt-text-generator'
+import { altTextGeneratorPlugin } from '@diffusenl/payload-alt-text-generator'
 
 export default buildConfig({
   // ... your config
@@ -98,6 +111,9 @@ altTextGeneratorPlugin({
   // Collections to enable alt text generation on
   collections: ['media'],
 
+  // AI provider configuration (see "AI Providers" section below)
+  provider: { provider: 'openai' },
+
   // Language for generated alt texts
   language: 'English',
 
@@ -106,9 +122,6 @@ altTextGeneratorPlugin({
 
   // Images to process in parallel (for bulk generation)
   batchSize: 5,
-
-  // Claude model to use
-  model: 'claude-sonnet-4-20250514',
 
   // Field name for alt text in your collection
   altFieldName: 'alt',
@@ -123,12 +136,82 @@ altTextGeneratorPlugin({
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
 | `collections` | `string[]` | `['media']` | Collection slugs to enable alt text generation on |
+| `provider` | `ProviderConfig` | `{ provider: 'openai' }` | AI provider configuration (see below) |
 | `language` | `string` | `'English'` | Language for generated alt texts |
 | `maxLength` | `number` | `80` | Maximum characters for generated alt text |
 | `batchSize` | `number` | `5` | Number of images to process in parallel |
-| `model` | `string` | `'claude-sonnet-4-20250514'` | Claude model for vision analysis |
 | `altFieldName` | `string` | `'alt'` | Field name for alt text in your collection |
-| `prompt` | `string` | See below | Custom prompt template for Claude |
+| `prompt` | `string` | See below | Custom prompt template for the AI |
+
+## AI Providers
+
+The plugin uses the [Vercel AI SDK](https://sdk.vercel.ai/) for unified multi-provider support. OpenAI and Anthropic are included by default; Google Gemini requires installing the AI SDK adapter.
+
+### OpenAI GPT-4 (Default)
+
+Uses GPT-4's vision capabilities. No additional installation needed. This is the default provider as it offers the best cost-to-quality ratio with `gpt-4o-mini`.
+
+```typescript
+altTextGeneratorPlugin({
+  provider: {
+    provider: 'openai',
+    model: 'gpt-4o-mini', // optional, this is the default
+    apiKey: process.env.OPENAI_API_KEY, // optional, uses env var by default
+  },
+})
+```
+
+**Environment variable:** `OPENAI_API_KEY`
+
+**Available models:** `gpt-4o-mini`, `gpt-4o`, `gpt-4-turbo`, etc.
+
+### Anthropic Claude
+
+Uses Claude's vision capabilities. No additional installation needed.
+
+```typescript
+altTextGeneratorPlugin({
+  provider: {
+    provider: 'anthropic',
+    model: 'claude-sonnet-4-20250514', // optional, this is the default for Anthropic
+    apiKey: process.env.ANTHROPIC_API_KEY, // optional, uses env var by default
+  },
+})
+```
+
+**Environment variable:** `ANTHROPIC_API_KEY`
+
+**Available models:** `claude-sonnet-4-20250514`, `claude-opus-4-20250514`, `claude-haiku-3-20240307`, etc.
+
+### Google Gemini
+
+Uses Gemini's vision capabilities. Requires the AI SDK Google adapter.
+
+```bash
+npm install @ai-sdk/google
+```
+
+```typescript
+altTextGeneratorPlugin({
+  provider: {
+    provider: 'google',
+    model: 'gemini-1.5-flash', // optional, this is the default for Google
+    apiKey: process.env.GOOGLE_GENERATIVE_AI_API_KEY, // optional, uses env var by default
+  },
+})
+```
+
+**Environment variable:** `GOOGLE_GENERATIVE_AI_API_KEY`
+
+**Available models:** `gemini-1.5-flash`, `gemini-1.5-pro`, `gemini-2.0-flash`, etc.
+
+### Provider Comparison
+
+| Provider | Default Model | Speed | Cost | Best For |
+|----------|---------------|-------|------|----------|
+| OpenAI (default) | gpt-4o-mini | Fast | Low | Best cost-to-quality ratio |
+| Anthropic | claude-sonnet-4-20250514 | Fast | Medium | High quality descriptions |
+| Google | gemini-1.5-flash | Very Fast | Low | High volume processing |
 
 ## Multi-language Support
 
@@ -144,7 +227,7 @@ The AI will generate alt texts in the specified language.
 
 ## Custom Prompts
 
-You can customize the prompt sent to Claude. Use these placeholders:
+You can customize the prompt sent to the AI. Use these placeholders:
 
 - `{filename}` - The image filename
 - `{maxLength}` - The configured max length
@@ -229,7 +312,7 @@ Large images are automatically handled:
 
 - **File size > 4MB**: Resized to 1600×1600 max
 - **Dimensions > 7500px**: Resized to 1600×1600 max
-- **SVG files**: Alt text derived from filename (Claude doesn't support SVG)
+- **SVG files**: Alt text derived from filename (vision APIs don't support SVG)
 
 ## Performance
 
@@ -263,7 +346,7 @@ The endpoints require authentication. Make sure you're logged into the Payload a
 
 ### Alt text is empty or generic
 
-Try customizing the prompt to give Claude more context about your specific use case. The filename is used as a hint, so descriptive filenames help.
+Try customizing the prompt to give the AI more context about your specific use case. The filename is used as a hint, so descriptive filenames help.
 
 ### Rate limiting (429 errors)
 
@@ -284,11 +367,22 @@ Images larger than 4MB or 7500px are automatically resized. If you still see err
 The plugin exports its types:
 
 ```typescript
-import type { AltTextGeneratorPluginOptions } from 'payload-alt-text-generator'
+import type {
+  AltTextGeneratorPluginOptions,
+  ProviderConfig,
+  AIProvider,
+  AnthropicProviderConfig,
+  OpenAIProviderConfig,
+  GoogleProviderConfig,
+} from '@diffusenl/payload-alt-text-generator'
 
 const options: AltTextGeneratorPluginOptions = {
   collections: ['media', 'products'],
   language: 'German',
+  provider: {
+    provider: 'openai',
+    model: 'gpt-4o',
+  },
 }
 ```
 
@@ -302,4 +396,4 @@ MIT License - see [LICENSE](./LICENSE) for details.
 
 ## Credits
 
-Built with [Payload CMS](https://payloadcms.com) and [Anthropic Claude](https://anthropic.com).
+Built with [Payload CMS](https://payloadcms.com) and [Vercel AI SDK](https://sdk.vercel.ai/). Supports [Anthropic Claude](https://anthropic.com), [OpenAI](https://openai.com), and [Google Gemini](https://ai.google.dev/).

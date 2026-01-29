@@ -103,7 +103,6 @@ var getMissingAlt = (options) => {
 };
 
 // src/endpoints/generateAlt.ts
-var import_sdk = __toESM(require("@anthropic-ai/sdk"));
 var import_sharp = __toESM(require("sharp"));
 function deriveAltFromFilename(filename) {
   const basename = filename.split("/").pop() || filename;
@@ -121,6 +120,7 @@ function deriveAltFromFilename(filename) {
   return cleaned;
 }
 var generateAlt = (options) => {
+  const { aiProvider } = options;
   return async (req) => {
     const { user } = req;
     if (!user) {
@@ -145,17 +145,14 @@ var generateAlt = (options) => {
       }
       const isSvg = ext === "svg";
       if (isSvg) {
-        const suggestedAlt2 = deriveAltFromFilename(filename || imageUrl);
+        const suggestedAlt = deriveAltFromFilename(filename || imageUrl);
         return Response.json({
           id: imageId,
           filename,
-          suggestedAlt: suggestedAlt2,
+          suggestedAlt,
           imageUrl
         });
       }
-      const anthropic = new import_sdk.default({
-        apiKey: process.env.ANTHROPIC_API_KEY
-      });
       let fullImageUrl = imageUrl;
       if (imageUrl.startsWith("/")) {
         const protocol = req.headers.get("x-forwarded-proto") || "http";
@@ -176,7 +173,7 @@ var generateAlt = (options) => {
         imageBuffer = await (0, import_sharp.default)(imageBuffer).resize(1600, 1600, { fit: "inside", withoutEnlargement: true }).jpeg({ quality: 80 }).toBuffer();
         wasResized = true;
       }
-      const base64Image = imageBuffer.toString("base64");
+      const base64Data = imageBuffer.toString("base64");
       const contentType = imageResponse.headers.get("content-type") || "";
       let mediaType = "image/jpeg";
       if (!wasResized) {
@@ -185,51 +182,15 @@ var generateAlt = (options) => {
         else if (contentType.includes("gif")) mediaType = "image/gif";
       }
       const prompt = options.prompt.replace(/{filename}/g, filename || "unknown").replace(/{maxLength}/g, String(options.maxLength)).replace(/{language}/g, options.language);
-      let message;
-      let retries = 0;
-      const maxRetries = 3;
-      while (retries <= maxRetries) {
-        try {
-          message = await anthropic.messages.create({
-            model: options.model,
-            max_tokens: 100,
-            messages: [
-              {
-                role: "user",
-                content: [
-                  {
-                    type: "image",
-                    source: {
-                      type: "base64",
-                      media_type: mediaType,
-                      data: base64Image
-                    }
-                  },
-                  {
-                    type: "text",
-                    text: prompt
-                  }
-                ]
-              }
-            ]
-          });
-          break;
-        } catch (err) {
-          const isRateLimit = err instanceof Error && err.message.includes("429");
-          if (isRateLimit && retries < maxRetries) {
-            const delay = Math.pow(2, retries) * 15e3;
-            await new Promise((resolve) => setTimeout(resolve, delay));
-            retries++;
-          } else {
-            throw err;
-          }
-        }
-      }
-      const suggestedAlt = message.content[0].type === "text" ? message.content[0].text.trim().slice(0, options.maxLength) : "";
+      const result = await aiProvider.generateAltText({
+        image: { base64Data, mediaType },
+        prompt,
+        maxLength: options.maxLength
+      });
       return Response.json({
         id: imageId,
         filename,
-        suggestedAlt,
+        suggestedAlt: result.altText,
         imageUrl
       });
     } catch (error) {
@@ -322,6 +283,202 @@ var saveBulkAlt = (options) => {
   };
 };
 
+// src/providers/anthropic.ts
+var import_ai = require("ai");
+var import_anthropic = require("@ai-sdk/anthropic");
+var DEFAULT_MODEL = "claude-sonnet-4-20250514";
+var AnthropicProvider = class {
+  constructor(options = {}) {
+    this.name = "anthropic";
+    this.apiKey = options.apiKey;
+    this.model = options.model ?? DEFAULT_MODEL;
+  }
+  async generateAltText(params) {
+    const { image, prompt, maxLength } = params;
+    const anthropic = (0, import_anthropic.createAnthropic)({
+      apiKey: this.apiKey ?? process.env.ANTHROPIC_API_KEY
+    });
+    let result;
+    let retries = 0;
+    const maxRetries = 3;
+    while (retries <= maxRetries) {
+      try {
+        result = await (0, import_ai.generateText)({
+          model: anthropic(this.model),
+          maxOutputTokens: 100,
+          messages: [
+            {
+              role: "user",
+              content: [
+                {
+                  type: "image",
+                  image: `data:${image.mediaType};base64,${image.base64Data}`
+                },
+                {
+                  type: "text",
+                  text: prompt
+                }
+              ]
+            }
+          ]
+        });
+        break;
+      } catch (err) {
+        const isRateLimit = err instanceof Error && (err.message.includes("429") || err.message.includes("rate limit"));
+        if (isRateLimit && retries < maxRetries) {
+          const delay = Math.pow(2, retries) * 15e3;
+          await new Promise((resolve) => setTimeout(resolve, delay));
+          retries++;
+        } else {
+          throw err;
+        }
+      }
+    }
+    const altText = result.text.trim().slice(0, maxLength);
+    return { altText };
+  }
+};
+
+// src/providers/openai.ts
+var import_ai2 = require("ai");
+var import_openai = require("@ai-sdk/openai");
+var DEFAULT_MODEL2 = "gpt-4o";
+var OpenAIProvider = class {
+  constructor(options = {}) {
+    this.name = "openai";
+    this.apiKey = options.apiKey;
+    this.model = options.model ?? DEFAULT_MODEL2;
+  }
+  async generateAltText(params) {
+    const { image, prompt, maxLength } = params;
+    const openai = (0, import_openai.createOpenAI)({
+      apiKey: this.apiKey ?? process.env.OPENAI_API_KEY
+    });
+    let result;
+    let retries = 0;
+    const maxRetries = 3;
+    while (retries <= maxRetries) {
+      try {
+        result = await (0, import_ai2.generateText)({
+          model: openai(this.model),
+          maxOutputTokens: 100,
+          messages: [
+            {
+              role: "user",
+              content: [
+                {
+                  type: "image",
+                  image: `data:${image.mediaType};base64,${image.base64Data}`
+                },
+                {
+                  type: "text",
+                  text: prompt
+                }
+              ]
+            }
+          ]
+        });
+        break;
+      } catch (err) {
+        const isRateLimit = err instanceof Error && (err.message.includes("429") || err.message.includes("rate limit"));
+        if (isRateLimit && retries < maxRetries) {
+          const delay = Math.pow(2, retries) * 15e3;
+          await new Promise((resolve) => setTimeout(resolve, delay));
+          retries++;
+        } else {
+          throw err;
+        }
+      }
+    }
+    const altText = result.text.trim().slice(0, maxLength);
+    return { altText };
+  }
+};
+
+// src/providers/google.ts
+var import_ai3 = require("ai");
+var import_google = require("@ai-sdk/google");
+var DEFAULT_MODEL3 = "gemini-1.5-flash";
+var GoogleProvider = class {
+  constructor(options = {}) {
+    this.name = "google";
+    this.apiKey = options.apiKey;
+    this.model = options.model ?? DEFAULT_MODEL3;
+  }
+  async generateAltText(params) {
+    const { image, prompt, maxLength } = params;
+    const google = (0, import_google.createGoogleGenerativeAI)({
+      apiKey: this.apiKey ?? process.env.GOOGLE_GENERATIVE_AI_API_KEY
+    });
+    let result;
+    let retries = 0;
+    const maxRetries = 3;
+    while (retries <= maxRetries) {
+      try {
+        result = await (0, import_ai3.generateText)({
+          model: google(this.model),
+          maxOutputTokens: 100,
+          messages: [
+            {
+              role: "user",
+              content: [
+                {
+                  type: "image",
+                  image: `data:${image.mediaType};base64,${image.base64Data}`
+                },
+                {
+                  type: "text",
+                  text: prompt
+                }
+              ]
+            }
+          ]
+        });
+        break;
+      } catch (err) {
+        const isRateLimit = err instanceof Error && (err.message.includes("429") || err.message.includes("RESOURCE_EXHAUSTED") || err.message.includes("rate limit"));
+        if (isRateLimit && retries < maxRetries) {
+          const delay = Math.pow(2, retries) * 15e3;
+          await new Promise((resolve) => setTimeout(resolve, delay));
+          retries++;
+        } else {
+          throw err;
+        }
+      }
+    }
+    const altText = result.text.trim().slice(0, maxLength);
+    return { altText };
+  }
+};
+
+// src/providers/index.ts
+function createProvider(config) {
+  if (!config) {
+    return new AnthropicProvider();
+  }
+  switch (config.provider) {
+    case "anthropic":
+      return new AnthropicProvider({
+        apiKey: config.apiKey,
+        model: config.model
+      });
+    case "openai":
+      return new OpenAIProvider({
+        apiKey: config.apiKey,
+        model: config.model
+      });
+    case "google":
+      return new GoogleProvider({
+        apiKey: config.apiKey,
+        model: config.model
+      });
+    default: {
+      const exhaustiveCheck = config;
+      throw new Error(`Unknown provider: ${exhaustiveCheck.provider}`);
+    }
+  }
+}
+
 // src/plugin.ts
 var defaultOptions = {
   collections: ["media"],
@@ -339,12 +496,36 @@ Rules:
 Respond with ONLY the alt text, nothing else.`,
   maxLength: 80,
   batchSize: 5,
-  model: "claude-sonnet-4-20250514",
+  model: "gpt-4o-mini",
   altFieldName: "alt",
-  language: "English"
+  language: "English",
+  provider: { provider: "openai" }
 };
+function resolveProviderConfig(pluginOptions) {
+  if (pluginOptions.provider) {
+    return pluginOptions.provider;
+  }
+  if (pluginOptions.model) {
+    console.warn(
+      `[alt-text-generator] The "model" option is deprecated. Use "provider: { provider: '...', model: '...' }" instead.`
+    );
+    if (pluginOptions.model.startsWith("claude")) {
+      return { provider: "anthropic", model: pluginOptions.model };
+    } else if (pluginOptions.model.startsWith("gemini")) {
+      return { provider: "google", model: pluginOptions.model };
+    }
+    return { provider: "openai", model: pluginOptions.model };
+  }
+  return { provider: "openai" };
+}
 var altTextGeneratorPlugin = (pluginOptions = {}) => {
-  const options = { ...defaultOptions, ...pluginOptions };
+  const providerConfig = resolveProviderConfig(pluginOptions);
+  const options = {
+    ...defaultOptions,
+    ...pluginOptions,
+    provider: providerConfig
+  };
+  const aiProvider = createProvider(providerConfig);
   return (incomingConfig) => {
     const collections = (incomingConfig.collections || []).map((collection) => {
       if (!options.collections.includes(collection.slug)) {
@@ -390,7 +571,7 @@ var altTextGeneratorPlugin = (pluginOptions = {}) => {
           {
             path: "/generate-alt",
             method: "post",
-            handler: generateAlt(options)
+            handler: generateAlt({ ...options, aiProvider })
           },
           {
             path: "/save-alt",

@@ -1,7 +1,7 @@
 {
   "name": "@diffusenl/payload-alt-text-generator",
   "version": "1.1.1",
-  "description": "AI-powered alt text generation for Payload CMS 3.x using Claude Vision API",
+  "description": "AI-powered alt text generation for Payload CMS 3.x with multi-provider support (Anthropic, OpenAI, Google Gemini)",
   "main": "dist/index.js",
   "module": "dist/index.mjs",
   "types": "dist/index.d.ts",
@@ -35,8 +35,13 @@
     "accessibility",
     "a11y",
     "ai",
+    "vercel-ai",
     "claude",
     "anthropic",
+    "openai",
+    "gpt-4",
+    "gemini",
+    "google",
     "vision",
     "image",
     "seo",
@@ -57,13 +62,23 @@
   },
   "peerDependencies": {
     "payload": "^3.0.0",
-    "react": "^18.0.0 || ^19.0.0"
+    "react": "^18.0.0 || ^19.0.0",
+    "@ai-sdk/google": "^3.0.0"
+  },
+  "peerDependenciesMeta": {
+    "@ai-sdk/google": {
+      "optional": true
+    }
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.30.0",
+    "ai": "^6.0.0",
+    "@ai-sdk/anthropic": "^3.0.0",
+    "@ai-sdk/openai": "^3.0.0",
     "sharp": "^0.34.5"
   },
   "devDependencies": {
+    "@ai-sdk/google": "^3.0.16",
+    "@ai-sdk/openai": "^3.0.21",
     "@payloadcms/ui": "^3.0.0",
     "@types/react": "^18.0.0",
     "payload": "^3.0.0",

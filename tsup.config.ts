@@ -11,7 +11,7 @@ export default defineConfig([
     splitting: false,
     sourcemap: true,
     clean: true,
-    external: ['react', 'react-dom', 'payload', '@payloadcms/ui', /^@payloadcms\/.*/],
+    external: ['react', 'react-dom', 'payload', '@payloadcms/ui', /^@payloadcms\/.*/, 'ai', /^@ai-sdk\/.*/],
   },
   // Client-side components
   {

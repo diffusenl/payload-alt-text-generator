@@ -1,3 +1,26 @@
+// Provider configuration types
+export type AIProvider = 'anthropic' | 'openai' | 'google'
+
+export interface AnthropicProviderConfig {
+  provider: 'anthropic'
+  apiKey?: string
+  model?: string
+}
+
+export interface OpenAIProviderConfig {
+  provider: 'openai'
+  apiKey?: string
+  model?: string
+}
+
+export interface GoogleProviderConfig {
+  provider: 'google'
+  apiKey?: string
+  model?: string
+}
+
+export type ProviderConfig = AnthropicProviderConfig | OpenAIProviderConfig | GoogleProviderConfig
+
 export interface AltTextGeneratorPluginOptions {
   /**
    * Collection slugs to add alt-text generation to
@@ -6,7 +29,7 @@ export interface AltTextGeneratorPluginOptions {
   collections?: string[]
 
   /**
-   * Custom prompt for Claude vision API
+   * Custom prompt for AI vision API
    * Use {filename} as placeholder for the image filename
    */
   prompt?: string
@@ -24,8 +47,15 @@ export interface AltTextGeneratorPluginOptions {
   batchSize?: number
 
   /**
-   * Claude model to use for vision
-   * @default 'claude-sonnet-4-20250514'
+   * AI provider configuration
+   * @default { provider: 'openai' }
+   */
+  provider?: ProviderConfig
+
+  /**
+   * AI model to use for vision
+   * @default 'gpt-4o-mini'
+   * @deprecated Use provider.model instead
    */
   model?: string
 

@@ -1,5 +1,22 @@
 import { Plugin } from 'payload';
 
+type AIProvider = 'anthropic' | 'openai' | 'google';
+interface AnthropicProviderConfig {
+    provider: 'anthropic';
+    apiKey?: string;
+    model?: string;
+}
+interface OpenAIProviderConfig {
+    provider: 'openai';
+    apiKey?: string;
+    model?: string;
+}
+interface GoogleProviderConfig {
+    provider: 'google';
+    apiKey?: string;
+    model?: string;
+}
+type ProviderConfig = AnthropicProviderConfig | OpenAIProviderConfig | GoogleProviderConfig;
 interface AltTextGeneratorPluginOptions {
     /**
      * Collection slugs to add alt-text generation to
@@ -7,7 +24,7 @@ interface AltTextGeneratorPluginOptions {
      */
     collections?: string[];
     /**
-     * Custom prompt for Claude vision API
+     * Custom prompt for AI vision API
      * Use {filename} as placeholder for the image filename
      */
     prompt?: string;
@@ -22,8 +39,14 @@ interface AltTextGeneratorPluginOptions {
      */
     batchSize?: number;
     /**
-     * Claude model to use for vision
-     * @default 'claude-sonnet-4-20250514'
+     * AI provider configuration
+     * @default { provider: 'openai' }
+     */
+    provider?: ProviderConfig;
+    /**
+     * AI model to use for vision
+     * @default 'gpt-4o-mini'
+     * @deprecated Use provider.model instead
      */
     model?: string;
     /**
@@ -54,4 +77,4 @@ interface AltTextSuggestion {
 
 declare const altTextGeneratorPlugin: (pluginOptions?: AltTextGeneratorPluginOptions) => Plugin;
 
-export { type AltTextGeneratorPluginOptions, type AltTextSuggestion, type ImageWithoutAlt, altTextGeneratorPlugin };
+export { type AIProvider, type AltTextGeneratorPluginOptions, type AltTextSuggestion, type AnthropicProviderConfig, type GoogleProviderConfig, type ImageWithoutAlt, type OpenAIProviderConfig, type ProviderConfig, altTextGeneratorPlugin };

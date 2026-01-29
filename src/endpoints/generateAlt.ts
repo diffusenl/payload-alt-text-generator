@@ -1,6 +1,6 @@
 import type { PayloadHandler } from 'payload'
 import type { AltTextGeneratorPluginOptions } from '../types'
-import Anthropic from '@anthropic-ai/sdk'
+import type { AIVisionProvider } from '../providers/types'
 import sharp from 'sharp'
 
 /**
@@ -36,9 +36,15 @@ function deriveAltFromFilename(filename: string): string {
   return cleaned
 }
 
+export interface GenerateAltOptions extends Required<AltTextGeneratorPluginOptions> {
+  aiProvider: AIVisionProvider
+}
+
 export const generateAlt = (
-  options: Required<AltTextGeneratorPluginOptions>
+  options: GenerateAltOptions
 ): PayloadHandler => {
+  const { aiProvider } = options
+
   return async (req) => {
     const { user } = req
 
@@ -87,10 +93,6 @@ export const generateAlt = (
         })
       }
 
-      const anthropic = new Anthropic({
-        apiKey: process.env.ANTHROPIC_API_KEY,
-      })
-
       // Build full URL if relative
       let fullImageUrl = imageUrl
       if (imageUrl.startsWith('/')) {
@@ -127,7 +129,7 @@ export const generateAlt = (
         wasResized = true
       }
 
-      const base64Image = imageBuffer.toString('base64')
+      const base64Data = imageBuffer.toString('base64')
 
       // Determine media type (jpeg if we resized, otherwise from content-type)
       const contentType = imageResponse.headers.get('content-type') || ''
@@ -145,58 +147,17 @@ export const generateAlt = (
         .replace(/{maxLength}/g, String(options.maxLength))
         .replace(/{language}/g, options.language)
 
-      // Retry with exponential backoff for rate limits
-      let message
-      let retries = 0
-      const maxRetries = 3
-
-      while (retries <= maxRetries) {
-        try {
-          message = await anthropic.messages.create({
-            model: options.model,
-            max_tokens: 100,
-            messages: [
-              {
-                role: 'user',
-                content: [
-                  {
-                    type: 'image',
-                    source: {
-                      type: 'base64',
-                      media_type: mediaType,
-                      data: base64Image,
-                    },
-                  },
-                  {
-                    type: 'text',
-                    text: prompt,
-                  },
-                ],
-              },
-            ],
-          })
-          break
-        } catch (err) {
-          const isRateLimit = err instanceof Error && err.message.includes('429')
-          if (isRateLimit && retries < maxRetries) {
-            const delay = Math.pow(2, retries) * 15000 // 15s, 30s, 60s
-            await new Promise(resolve => setTimeout(resolve, delay))
-            retries++
-          } else {
-            throw err
-          }
-        }
-      }
-
-      const suggestedAlt =
-        message.content[0].type === 'text'
-          ? message.content[0].text.trim().slice(0, options.maxLength)
-          : ''
+      // Call the AI provider
+      const result = await aiProvider.generateAltText({
+        image: { base64Data, mediaType },
+        prompt,
+        maxLength: options.maxLength,
+      })
 
       return Response.json({
         id: imageId,
         filename,
-        suggestedAlt,
+        suggestedAlt: result.altText,
         imageUrl,
       })
     } catch (error) {

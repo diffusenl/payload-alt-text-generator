@@ -628,6 +628,9 @@ var AltTextGenerator = ({
     setIsOpen(false);
     fetchCount();
   };
+  if (isLoading || missingCount === 0) {
+    return null;
+  }
   return /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("div", { style: { marginBottom: "1rem" }, children: [
     /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)(
       import_ui3.Button,
@@ -637,7 +640,6 @@ var AltTextGenerator = ({
           setIsOpen(true);
         },
         buttonStyle: "secondary",
-        disabled: isLoading || missingCount === 0,
         children: [
           "Generate Missing Alt Texts",
           !isLoading && missingCount > 0 && /* @__PURE__ */ (0, import_jsx_runtime3.jsx)(

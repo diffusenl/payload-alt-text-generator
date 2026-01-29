@@ -72,6 +72,11 @@ export const AltTextGenerator: React.FC<AltTextGeneratorProps> = ({
     fetchCount()
   }
 
+  // Don't render anything if loading or no images are missing alt text
+  if (isLoading || missingCount === 0) {
+    return null
+  }
+
   return (
     <div style={{ marginBottom: '1rem' }}>
       <Button
@@ -80,7 +85,6 @@ export const AltTextGenerator: React.FC<AltTextGeneratorProps> = ({
           setIsOpen(true)
         }}
         buttonStyle="secondary"
-        disabled={isLoading || missingCount === 0}
       >
         Generate Missing Alt Texts
         {!isLoading && missingCount > 0 && (

@@ -600,6 +600,9 @@ var AltTextGenerator = ({
     setIsOpen(false);
     fetchCount();
   };
+  if (isLoading || missingCount === 0) {
+    return null;
+  }
   return /* @__PURE__ */ jsxs3("div", { style: { marginBottom: "1rem" }, children: [
     /* @__PURE__ */ jsxs3(
       Button3,
@@ -609,7 +612,6 @@ var AltTextGenerator = ({
           setIsOpen(true);
         },
         buttonStyle: "secondary",
-        disabled: isLoading || missingCount === 0,
         children: [
           "Generate Missing Alt Texts",
           !isLoading && missingCount > 0 && /* @__PURE__ */ jsx3(

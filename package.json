@@ -58,7 +58,7 @@
   },
   "homepage": "https://github.com/diffusenl/payload-alt-text-generator#readme",
   "engines": {
-    "node": ">=18.0.0"
+    "node": ">=20.9.0"
   },
   "peerDependencies": {
     "payload": "^3.0.0",
@@ -74,7 +74,7 @@
     "ai": "^6.0.0",
     "@ai-sdk/anthropic": "^3.0.0",
     "@ai-sdk/openai": "^3.0.0",
-    "sharp": "^0.34.5"
+    "sharp": "^0.35.5"
   },
   "devDependencies": {
     "@ai-sdk/google": "^3.0.16",

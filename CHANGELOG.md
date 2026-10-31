@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.3.5] - 2026-10-31
+
+### Changed
+
+- **sharp 0.35** - Raised the `sharp` dependency from `^0.34.5` to `^0.35.5`. Sites now share one copy of sharp with Next.js 16 instead of installing a separate 0.34.5, which resolves three high-severity advisories ([GHSA-f88m-g3jw-g9cj](https://github.com/advisories/GHSA-f88m-g3jw-g9cj), [GHSA-rgj7-g3m4-5g8c](https://github.com/advisories/GHSA-rgj7-g3m4-5g8c), [GHSA-wq5f-xc86-pv6w](https://github.com/advisories/GHSA-wq5f-xc86-pv6w)).
+- **Node.js 20.9 or later** - sharp 0.35 dropped support for Node.js 18, so the plugin now requires Node.js 20.9.0 or later.
+
 ## [1.1.0] - 2025-01-29
 
 ### Added
